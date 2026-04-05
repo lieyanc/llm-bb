@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"llm-bb/internal/config"
 	"llm-bb/internal/model"
@@ -32,116 +31,48 @@ type Server struct {
 }
 
 type indexPageData struct {
-	Now           time.Time
-	Rooms         []model.RoomOverview
-	TotalRooms    int
-	RunningRooms  int
-	TotalMessages int
-	TotalTokens   int
+	Rooms         []model.RoomOverview `json:"rooms"`
+	TotalRooms    int                  `json:"totalRooms"`
+	RunningRooms  int                  `json:"runningRooms"`
+	TotalMessages int                  `json:"totalMessages"`
+	TotalTokens   int                  `json:"totalTokens"`
 }
 
 type roomPageData struct {
-	Now           time.Time
-	Room          model.Room
-	Members       []model.RoomMemberView
-	Messages      []model.Message
-	LatestSummary *model.Summary
-	TokensToday   int
-	MessageCount  int
-	MemberCount   int
+	Room          model.Room             `json:"room"`
+	Members       []model.RoomMemberView `json:"members"`
+	Messages      []model.Message        `json:"messages"`
+	LatestSummary *model.Summary         `json:"latestSummary"`
+	TokensToday   int                    `json:"tokensToday"`
+	MessageCount  int                    `json:"messageCount"`
+	MemberCount   int                    `json:"memberCount"`
 }
 
 type adminPageData struct {
-	Now           time.Time
-	Rooms         []model.RoomOverview
-	Personas      []model.Persona
-	Factions      []model.Faction
-	Providers     []model.ProviderConfig
-	AdminOpen     bool
-	RoomMembers   map[int64][]model.RoomMemberView
-	RunningRooms  int
-	TotalMessages int
-	TotalTokens   int
+	Rooms         []model.RoomOverview             `json:"rooms"`
+	Personas      []model.Persona                  `json:"personas"`
+	Factions      []model.Faction                  `json:"factions"`
+	Providers     []model.ProviderConfig           `json:"providers"`
+	AdminOpen     bool                             `json:"adminOpen"`
+	RoomMembers   map[int64][]model.RoomMemberView `json:"roomMembers"`
+	RunningRooms  int                              `json:"runningRooms"`
+	TotalMessages int                              `json:"totalMessages"`
+	TotalTokens   int                              `json:"totalTokens"`
+}
+
+type appTemplateData struct {
+	Title     string
+	Bootstrap template.JS
+}
+
+type appBootstrap struct {
+	Page  string `json:"page"`
+	Title string `json:"title"`
+	Data  any    `json:"data"`
 }
 
 func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Scheduler, hub *stream.Hub, logger *log.Logger) (*Server, error) {
-	funcMap := template.FuncMap{
-		"formatTime": func(t time.Time) string {
-			if t.IsZero() {
-				return "-"
-			}
-			return t.Local().Format("2006-01-02 15:04:05")
-		},
-		"statusClass": func(status model.RoomStatus) string {
-			switch status {
-			case model.RoomStatusRunning:
-				return "pill pill-running"
-			case model.RoomStatusPaused:
-				return "pill pill-paused"
-			default:
-				return "pill pill-degraded"
-			}
-		},
-		"statusText": func(status model.RoomStatus) string {
-			switch status {
-			case model.RoomStatusRunning:
-				return "运行中"
-			case model.RoomStatusPaused:
-				return "已暂停"
-			default:
-				return "降频中"
-			}
-		},
-		"maskKey": func(value string) string {
-			value = strings.TrimSpace(value)
-			if value == "" {
-				return "未配置"
-			}
-			if len(value) <= 8 {
-				return strings.Repeat("*", len(value))
-			}
-			return value[:4] + strings.Repeat("*", len(value)-8) + value[len(value)-4:]
-		},
-		"joinMemberNames": func(members []model.RoomMemberView) string {
-			names := make([]string, 0, len(members))
-			for _, member := range members {
-				names = append(names, member.PersonaName)
-			}
-			return strings.Join(names, "、")
-		},
-		"initials": func(value string) string {
-			value = strings.TrimSpace(value)
-			if value == "" {
-				return "?"
-			}
-			runes := []rune(value)
-			if len(runes) == 1 {
-				return string(runes[0])
-			}
-			return string(runes[:2])
-		},
-		"relativeUnix": func(value int64) string {
-			if value <= 0 {
-				return "暂无活动"
-			}
-			diff := time.Since(time.Unix(value, 0))
-			switch {
-			case diff < time.Minute:
-				return "刚刚活跃"
-			case diff < time.Hour:
-				return fmt.Sprintf("%d 分钟前", int(diff.Minutes()))
-			case diff < 24*time.Hour:
-				return fmt.Sprintf("%d 小时前", int(diff.Hours()))
-			default:
-				return fmt.Sprintf("%d 天前", int(diff.Hours()/24))
-			}
-		},
-		"chars": func(value string) int {
-			return utf8.RuneCountInString(strings.TrimSpace(value))
-		},
-	}
-
-	tmpl, err := template.New("pages").Funcs(funcMap).ParseFS(assets, "templates/*.html")
+	tmpl, err := template.New("pages").ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
@@ -204,8 +135,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, "index", indexPageData{
-		Now:           time.Now(),
+	s.renderApp(w, "llm-bb", "home", indexPageData{
 		Rooms:         rooms,
 		TotalRooms:    len(rooms),
 		RunningRooms:  countRunningRooms(rooms),
@@ -247,8 +177,7 @@ func (s *Server) handleRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.render(w, "room", roomPageData{
-		Now:           time.Now(),
+	s.renderApp(w, fmt.Sprintf("%s - llm-bb", room.Name), "room", roomPageData{
 		Room:          room,
 		Members:       members,
 		Messages:      messages,
@@ -387,8 +316,7 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		roomMembers[room.ID] = members
 	}
 
-	s.render(w, "admin", adminPageData{
-		Now:           time.Now(),
+	s.renderApp(w, "导演台 - llm-bb", "admin", adminPageData{
 		Rooms:         rooms,
 		Personas:      personas,
 		Factions:      factions,
@@ -704,7 +632,25 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) render(w http.ResponseWriter, name string, data any) {
+func (s *Server) renderApp(w http.ResponseWriter, title, page string, data any) {
+	bootstrap, err := json.Marshal(appBootstrap{
+		Page:  page,
+		Title: title,
+		Data:  data,
+	})
+	if err != nil {
+		s.logger.Printf("marshal bootstrap: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.renderTemplate(w, "app", appTemplateData{
+		Title:     title,
+		Bootstrap: template.JS(bootstrap),
+	})
+}
+
+func (s *Server) renderTemplate(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
 		s.logger.Printf("render template %s: %v", name, err)

@@ -12,10 +12,11 @@
 - Go 单体应用
 - SQLite 持久化
 - SSE 实时消息推送
-- 前台房间页 + 后台导演台
+- React + shadcn/ui 前台房间页 + 后台导演台
 - 进程内 room scheduler
 - OpenAI-compatible `chat completions` client
 - 无 provider 时的本地退化台词生成
+- 前端静态资源构建后嵌入 Go 二进制
 
 ## Run
 
@@ -28,6 +29,8 @@
 - 监听 `127.0.0.1:8080`
 - 使用独立数据库 `data/dev/llm-bb.db`
 - 保持 `seed_demo_data=true`，首次启动即可看到演示房间
+- 若缺少 `node_modules` 会先执行 `npm ci`
+- 每次启动前都会执行 `npm run build:ui`，然后再 `go run`，确保本次运行的二进制嵌入的是最新前端资源
 
 首次启动会：
 
@@ -55,9 +58,13 @@ go run ./cmd/llm-bb
 ## Build
 
 ```bash
+npm run build:ui
 go build ./...
 go build -o bin/llm-bb ./cmd/llm-bb
 ```
+
+如果你直接执行 `go build`，编译器只会嵌入当前 `internal/web/static` 目录里已经存在的资源。
+所以在修改了前端代码之后，需要先重新跑一次 `npm run build:ui`。
 
 ## Config
 

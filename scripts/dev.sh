@@ -14,4 +14,12 @@ printf 'starting llm-bb dev server\n'
 printf '  address: %s\n' "$LLM_BB_ADDRESS"
 printf '  database: %s\n' "$LLM_BB_DATABASE_PATH"
 
+if [[ ! -d node_modules ]]; then
+  printf 'installing frontend dependencies\n'
+  npm ci
+fi
+
+printf 'building embedded frontend bundle\n'
+npm run build:ui
+
 exec go run ./cmd/llm-bb "$@"

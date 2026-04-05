@@ -10,6 +10,7 @@ type Hub struct {
 	mu          sync.RWMutex
 	nextID      int
 	subscribers map[int64]map[int]chan model.Message
+	closed      bool
 }
 
 func NewHub() *Hub {
@@ -21,6 +22,12 @@ func NewHub() *Hub {
 func (h *Hub) Subscribe(roomID int64) (<-chan model.Message, func()) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	if h.closed {
+		ch := make(chan model.Message)
+		close(ch)
+		return ch, func() {}
+	}
 
 	h.nextID++
 	id := h.nextID
@@ -58,10 +65,32 @@ func (h *Hub) Publish(message model.Message) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	if h.closed {
+		return
+	}
+
 	for _, ch := range h.subscribers[message.RoomID] {
 		select {
 		case ch <- message:
 		default:
 		}
+	}
+}
+
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.closed {
+		return
+	}
+	h.closed = true
+
+	for roomID, roomSubs := range h.subscribers {
+		for id, stream := range roomSubs {
+			delete(roomSubs, id)
+			close(stream)
+		}
+		delete(h.subscribers, roomID)
 	}
 }
