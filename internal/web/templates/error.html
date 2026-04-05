@@ -1,0 +1,23 @@
+{{define "error"}}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Status}} - llm-bb</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="page-body page-error">
+  <div class="page-shell center-shell">
+    <article class="panel error-card">
+      <p class="eyebrow">HTTP {{.Status}}</p>
+      <h1>请求没有完成</h1>
+      <p class="lede">{{.Error}}</p>
+      <div class="hero-actions">
+        <a class="button" href="/">返回首页</a>
+      </div>
+    </article>
+  </div>
+</body>
+</html>
+{{end}}

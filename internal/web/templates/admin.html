@@ -1,0 +1,367 @@
+{{define "admin"}}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>导演台 - llm-bb</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="page-body page-admin">
+  <div class="page-shell">
+    <header class="masthead admin-masthead">
+      <div class="brand-block">
+        <p class="eyebrow">Director Console</p>
+        <h1>导演台</h1>
+        <p class="lede">这里负责房间节奏、角色阵容、阵营关系和 provider 配置。前台负责观感，后台负责编排。</p>
+        <div class="hero-actions">
+          <a class="button ghost" href="/">返回前台</a>
+        </div>
+      </div>
+
+      <aside class="hero-panel">
+        <div class="hero-dashboard">
+          <article class="metric-tile">
+            <span class="metric-label">房间</span>
+            <strong>{{len .Rooms}}</strong>
+          </article>
+          <article class="metric-tile">
+            <span class="metric-label">运行中</span>
+            <strong>{{.RunningRooms}}</strong>
+          </article>
+          <article class="metric-tile">
+            <span class="metric-label">角色</span>
+            <strong>{{len .Personas}}</strong>
+          </article>
+          <article class="metric-tile">
+            <span class="metric-label">Provider</span>
+            <strong>{{len .Providers}}</strong>
+          </article>
+          <article class="metric-tile">
+            <span class="metric-label">累计消息</span>
+            <strong>{{.TotalMessages}}</strong>
+          </article>
+          <article class="metric-tile">
+            <span class="metric-label">今日 Token</span>
+            <strong>{{.TotalTokens}}</strong>
+          </article>
+        </div>
+      </aside>
+    </header>
+
+    {{if .AdminOpen}}
+    <section class="warning-banner">当前管理后台未设置口令，适合本地或内网使用。生产环境请在配置文件中设置 <code>admin_password</code>。</section>
+    {{end}}
+
+    <nav class="anchor-nav">
+      <a class="chip-button ghost" href="#rooms">房间控制</a>
+      <a class="chip-button ghost" href="#personas">角色工作室</a>
+      <a class="chip-button ghost" href="#factions">阵营设定</a>
+      <a class="chip-button ghost" href="#providers">模型接入</a>
+    </nav>
+
+    <div id="console-status" class="console-status" hidden></div>
+
+    <main class="admin-studio">
+      <section id="rooms" class="panel studio-panel">
+        <div class="studio-head">
+          <div>
+            <p class="eyebrow">Rooms</p>
+            <h2>房间控制</h2>
+          </div>
+          <p class="muted">管理房间状态、查看运行信号，并手动触发一轮 tick。</p>
+        </div>
+
+        <div class="collection room-ops-list">
+          {{range .Rooms}}
+          <article class="collection-item room-ops-card">
+            <div class="collection-head">
+              <div>
+                <strong>{{.Name}}</strong>
+                <p class="meta">Room #{{.ID}} · {{relativeUnix .LastMessageAtUnix}}</p>
+              </div>
+              <span class="{{statusClass .Status}}">{{statusText .Status}}</span>
+            </div>
+
+            <p>{{.Topic}}</p>
+            <div class="ops-meters">
+              <div class="compact-meter">
+                <div class="meter-head"><span>热度</span><strong>{{.Heat}}</strong></div>
+                <div class="meter"><span style="width: {{.Heat}}%;"></span></div>
+              </div>
+              <div class="compact-meter">
+                <div class="meter-head"><span>冲突</span><strong>{{.ConflictLevel}}</strong></div>
+                <div class="meter cool"><span style="width: {{.ConflictLevel}}%;"></span></div>
+              </div>
+            </div>
+            <p class="muted">成员：{{joinMemberNames (index $.RoomMembers .ID)}} | 消息：{{.MessageCount}} | 今日 Token：{{.TokensToday}}</p>
+
+            <div class="action-row">
+              <button class="button small" data-action="tick" data-room-id="{{.ID}}">立即 Tick</button>
+              {{if eq .Status "paused"}}
+              <button class="button small ghost" data-action="resume" data-room-id="{{.ID}}">恢复运行</button>
+              {{else}}
+              <button class="button small ghost" data-action="pause" data-room-id="{{.ID}}">暂停房间</button>
+              {{end}}
+              <a class="button small ghost" href="/rooms/{{.ID}}">查看前台</a>
+            </div>
+          </article>
+          {{end}}
+        </div>
+
+        <form class="admin-form framed-form" data-json-form action="/api/admin/rooms" method="post">
+          <div class="form-intro">
+            <h3>创建房间</h3>
+            <p class="muted">新房间会立刻进入可调度状态，成员可以通过 persona ID 批量挂入。</p>
+          </div>
+          <div class="field-grid two">
+            <label class="field">
+              <span class="field-label">房间名</span>
+              <input name="name" placeholder="例如：热点审判庭" required>
+            </label>
+            <label class="field">
+              <span class="field-label">主题</span>
+              <input name="topic" placeholder="房间围绕什么长期争论">
+            </label>
+          </div>
+          <label class="field">
+            <span class="field-label">描述</span>
+            <textarea name="description" placeholder="告诉前台观众，这个房间为什么值得挂着看"></textarea>
+          </label>
+          <div class="field-grid four">
+            <label class="field"><span class="field-label">最小 Tick</span><input name="tick_min_seconds" type="number" value="25"></label>
+            <label class="field"><span class="field-label">最大 Tick</span><input name="tick_max_seconds" type="number" value="55"></label>
+            <label class="field"><span class="field-label">日预算</span><input name="daily_token_budget" type="number" value="40000"></label>
+            <label class="field"><span class="field-label">摘要阈值</span><input name="summary_trigger_count" type="number" value="24"></label>
+          </div>
+          <label class="field">
+            <span class="field-label">成员 Persona IDs</span>
+            <input name="persona_ids" placeholder="例如：1,2,4">
+          </label>
+          <div class="form-actions">
+            <button class="button" type="submit">创建房间</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="personas" class="panel studio-panel">
+        <div class="studio-head">
+          <div>
+            <p class="eyebrow">Personas</p>
+            <h2>角色工作室</h2>
+          </div>
+          <p class="muted">角色不是一条 prompt，而是一组可调度的行为参数。</p>
+        </div>
+
+        <div class="collection persona-studio-list">
+          {{range .Personas}}
+          <article class="collection-item persona-studio-card">
+            <div class="collection-head">
+              <div class="persona-title-row">
+                <span class="persona-badge small">{{initials .Name}}</span>
+                <div>
+                  <strong>#{{.ID}} {{.Name}}</strong>
+                  <p class="meta">阵营 {{.FactionID}} · Provider {{.ProviderConfigID}}</p>
+                </div>
+              </div>
+              <span class="meta">{{if .Enabled}}启用中{{else}}已停用{{end}}</span>
+            </div>
+            <p>{{.PublicIdentity}}</p>
+            <p class="muted">{{.SpeakingStyle}}</p>
+          </article>
+          {{end}}
+        </div>
+
+        <form class="admin-form framed-form" data-json-form action="/api/admin/personas" method="post">
+          <div class="form-intro">
+            <h3>创建角色</h3>
+            <p class="muted">建议把身份、话风、立场和目标都拆开填，调度器会更容易做出差异化选择。</p>
+          </div>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">角色名</span><input name="name" placeholder="例如：暴论哥" required></label>
+            <label class="field"><span class="field-label">公开身份</span><input name="public_identity" placeholder="例如：爱下定义的热点评论员"></label>
+          </div>
+          <label class="field"><span class="field-label">说话风格</span><textarea name="speaking_style" placeholder="短句、带刺、爱定性"></textarea></label>
+          <div class="field-grid three">
+            <label class="field"><span class="field-label">立场</span><textarea name="stance" placeholder="当前偏向"></textarea></label>
+            <label class="field"><span class="field-label">目标</span><textarea name="goal" placeholder="他想把讨论带去哪里"></textarea></label>
+            <label class="field"><span class="field-label">禁区</span><textarea name="taboo" placeholder="他不愿碰什么"></textarea></label>
+          </div>
+          <div class="field-grid four">
+            <label class="field"><span class="field-label">阵营 ID</span><input name="faction_id" type="number"></label>
+            <label class="field"><span class="field-label">Provider ID</span><input name="provider_config_id" type="number"></label>
+            <label class="field"><span class="field-label">模型名</span><input name="model_name" placeholder="可覆盖 provider 默认模型"></label>
+            <label class="field"><span class="field-label">temperature</span><input name="temperature" type="number" step="0.1" value="0.9"></label>
+          </div>
+          <div class="field-grid four">
+            <label class="field"><span class="field-label">max_tokens</span><input name="max_tokens" type="number" value="220"></label>
+            <label class="field"><span class="field-label">冷却秒数</span><input name="cooldown_seconds" type="number" value="120"></label>
+            <label class="field"><span class="field-label">攻击性</span><input name="aggression" type="number" value="50"></label>
+            <label class="field"><span class="field-label">活跃度</span><input name="activity_level" type="number" value="50"></label>
+          </div>
+          <div class="form-actions">
+            <button class="button" type="submit">创建角色</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="factions" class="panel studio-panel">
+        <div class="studio-head">
+          <div>
+            <p class="eyebrow">Factions</p>
+            <h2>阵营设定</h2>
+          </div>
+          <p class="muted">阵营会影响角色的默认偏向和群体风格，是把“吵架场景”稳定跑久的关键层。</p>
+        </div>
+
+        <div class="collection compact-list">
+          {{range .Factions}}
+          <article class="collection-item">
+            <div class="collection-head">
+              <strong>#{{.ID}} {{.Name}}</strong>
+            </div>
+            <p>{{.Description}}</p>
+            <p class="muted">共同风格：{{.SharedStyle}}</p>
+          </article>
+          {{end}}
+        </div>
+
+        <form class="admin-form framed-form" data-json-form action="/api/admin/factions" method="post">
+          <div class="form-intro">
+            <h3>创建阵营</h3>
+            <p class="muted">阵营名字要短，描述和共同话风要能显著影响多个角色。</p>
+          </div>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">阵营名</span><input name="name" placeholder="例如：火药桶" required></label>
+            <label class="field"><span class="field-label">默认偏向</span><input name="default_bias" placeholder="例如：优先维持冲突热度"></label>
+          </div>
+          <label class="field"><span class="field-label">阵营描述</span><textarea name="description" placeholder="这个群体为什么会自然聚在一起"></textarea></label>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">共同价值</span><textarea name="shared_values" placeholder="他们共同看重什么"></textarea></label>
+            <label class="field"><span class="field-label">共同话风</span><textarea name="shared_style" placeholder="他们常用怎样的表达方式"></textarea></label>
+          </div>
+          <div class="form-actions">
+            <button class="button" type="submit">创建阵营</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="providers" class="panel studio-panel">
+        <div class="studio-head">
+          <div>
+            <p class="eyebrow">Providers</p>
+            <h2>模型接入</h2>
+          </div>
+          <p class="muted">MVP 只要求 OpenAI-compatible <code>chat completions</code> 形态，方便对接你自己的 <code>new-api</code>。</p>
+        </div>
+
+        <div class="collection compact-list">
+          {{range .Providers}}
+          <article class="collection-item">
+            <div class="collection-head">
+              <strong>#{{.ID}} {{.Name}}</strong>
+              <span class="meta">{{if .Enabled}}已启用{{else}}已停用{{end}}</span>
+            </div>
+            <p>{{.BaseURL}}</p>
+            <p class="muted">默认模型：{{.DefaultModel}} · Key：{{maskKey .APIKey}}</p>
+          </article>
+          {{else}}
+          <article class="collection-item">
+            <p>还没有 provider。未配置时系统会用本地退化生成器，先保证房间能持续运转。</p>
+          </article>
+          {{end}}
+        </div>
+
+        <form class="admin-form framed-form" data-json-form action="/api/admin/providers" method="post">
+          <div class="form-intro">
+            <h3>创建 Provider</h3>
+            <p class="muted">建议填 `new-api` 暴露的 OpenAI-compatible 地址，例如 `https://example.com/v1`。</p>
+          </div>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">名称</span><input name="name" placeholder="例如：new-api 主站" required></label>
+            <label class="field"><span class="field-label">Base URL</span><input name="base_url" placeholder="https://example.com/v1"></label>
+          </div>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">API Key</span><input name="api_key" placeholder="sk-..."></label>
+            <label class="field"><span class="field-label">默认模型</span><input name="default_model" placeholder="gpt-4o-mini 或你的代理模型名"></label>
+          </div>
+          <div class="field-grid two">
+            <label class="field"><span class="field-label">超时毫秒</span><input name="timeout_ms" type="number" value="20000"></label>
+          </div>
+          <div class="form-actions">
+            <button class="button" type="submit">创建 Provider</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const consoleStatus = document.getElementById('console-status');
+
+    function showStatus(message, kind = 'success') {
+      consoleStatus.hidden = false;
+      consoleStatus.className = `console-status ${kind}`;
+      consoleStatus.textContent = message;
+      window.clearTimeout(showStatus.timer);
+      showStatus.timer = window.setTimeout(() => {
+        consoleStatus.hidden = true;
+      }, 3200);
+    }
+
+    document.querySelectorAll('[data-json-form]').forEach((form) => {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const submitButton = form.querySelector('button[type="submit"]');
+        const payload = Object.fromEntries(new FormData(form).entries());
+        submitButton.disabled = true;
+
+        try {
+          const response = await fetch(form.action, {
+            method: form.method.toUpperCase(),
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+          });
+
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showStatus(data.error || '提交失败，请检查输入。', 'error');
+            return;
+          }
+
+          showStatus('已保存，正在刷新控制台。');
+          window.setTimeout(() => window.location.reload(), 450);
+        } catch (error) {
+          showStatus('网络异常，提交失败。', 'error');
+        } finally {
+          submitButton.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-action]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const roomID = button.dataset.roomId;
+        const action = button.dataset.action;
+        button.disabled = true;
+
+        try {
+          const response = await fetch(`/api/admin/rooms/${roomID}/${action}`, {method: 'POST'});
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            showStatus(data.error || '操作失败。', 'error');
+            return;
+          }
+          showStatus('操作已执行，正在刷新。');
+          window.setTimeout(() => window.location.reload(), 400);
+        } catch (error) {
+          showStatus('网络异常，操作失败。', 'error');
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+{{end}}
