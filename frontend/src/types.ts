@@ -139,6 +139,29 @@ export interface Relationship {
   updated_at: string
 }
 
+export interface VersionInfo {
+  version: string
+  commit: string
+  channel: string
+  buildDate: string
+  goos: string
+  goarch: string
+}
+
+export type UpdateChannel = "stable" | "dev"
+
+export interface UpdateCheckResult {
+  channel: UpdateChannel
+  latestTag: string
+  latestName: string
+  latestCommit: string
+  publishedAt: string
+  notes: string
+  assetName: string
+  assetSize: number
+  updateAvailable: boolean
+}
+
 export interface HomePageData {
   rooms: RoomOverview[]
   totalRooms: number

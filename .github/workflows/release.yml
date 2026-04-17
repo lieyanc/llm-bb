@@ -56,12 +56,21 @@ jobs:
           set -eu
           mkdir -p dist
           VERSION="${GITHUB_REF_NAME}"
+          CHANNEL="stable"
           if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
             VERSION="dev-$(git rev-parse --short HEAD)"
+            CHANNEL="dev"
           fi
+          COMMIT="$(git rev-parse HEAD)"
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-s -w"
+          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Version=${VERSION}"
+          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Commit=${COMMIT}"
+          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Channel=${CHANNEL}"
+          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.BuildDate=${BUILD_DATE}"
           BASE="llm-bb-${VERSION}-${GOOS}-${GOARCH}"
           OUT="dist/${BASE}${{ matrix.ext }}"
-          go build -trimpath -ldflags="-s -w" -o "$OUT" ./cmd/llm-bb
+          go build -trimpath -ldflags="$LDFLAGS" -o "$OUT" ./cmd/llm-bb
           cd dist
           if [ "${GOOS}" = "windows" ]; then
             zip "${BASE}.zip" "${BASE}${{ matrix.ext }}"

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,16 +19,20 @@ import (
 	"llm-bb/internal/scheduler"
 	"llm-bb/internal/store"
 	"llm-bb/internal/stream"
+	"llm-bb/internal/update"
+	"llm-bb/internal/version"
 )
 
 type Server struct {
-	cfg       config.Config
-	store     *store.Store
-	scheduler *scheduler.Scheduler
-	hub       *stream.Hub
-	logger    *log.Logger
-	templates *template.Template
-	staticFS  fs.FS
+	cfg         config.Config
+	store       *store.Store
+	scheduler   *scheduler.Scheduler
+	hub         *stream.Hub
+	logger      *log.Logger
+	templates   *template.Template
+	staticFS    fs.FS
+	updater     *update.Client
+	onRestart   func()
 }
 
 type indexPageData struct {
@@ -72,7 +77,7 @@ type appBootstrap struct {
 	Data  any    `json:"data"`
 }
 
-func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Scheduler, hub *stream.Hub, logger *log.Logger) (*Server, error) {
+func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Scheduler, hub *stream.Hub, logger *log.Logger, onRestart func()) (*Server, error) {
 	tmpl, err := template.New("pages").ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
@@ -91,6 +96,8 @@ func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Sched
 		logger:    logger,
 		templates: tmpl,
 		staticFS:  staticFS,
+		updater:   update.NewClient(),
+		onRestart: onRestart,
 	}, nil
 }
 
@@ -134,6 +141,11 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/admin/relationships", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipsList)))
 	mux.Handle("POST /api/admin/relationships", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipUpsert)))
 	mux.Handle("DELETE /api/admin/relationships/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipDelete)))
+
+	mux.Handle("GET /api/admin/version", s.requireAdmin(http.HandlerFunc(s.handleAdminVersion)))
+	mux.Handle("GET /api/admin/update/check", s.requireAdmin(http.HandlerFunc(s.handleAdminUpdateCheck)))
+	mux.Handle("POST /api/admin/update/apply", s.requireAdmin(http.HandlerFunc(s.handleAdminUpdateApply)))
+	mux.Handle("POST /api/admin/update/restart", s.requireAdmin(http.HandlerFunc(s.handleAdminRestart)))
 
 	return s.loggingMiddleware(mux)
 }
@@ -739,6 +751,67 @@ func (s *Server) handleAdminRelationshipDelete(w http.ResponseWriter, r *http.Re
 		return
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminVersion(w http.ResponseWriter, r *http.Request) {
+	s.writeJSON(w, http.StatusOK, map[string]any{"version": version.Get()})
+}
+
+func (s *Server) handleAdminUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
+	if channel == "" {
+		channel = version.Channel
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	result, err := s.updater.Check(ctx, channel, version.Commit, version.Version)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadGateway, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"current": version.Get(),
+		"result":  result,
+	})
+}
+
+func (s *Server) handleAdminUpdateApply(w http.ResponseWriter, r *http.Request) {
+	payload, err := readPayload(r)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	channel := strings.TrimSpace(stringValue(payload, "channel"))
+	if channel == "" {
+		channel = version.Channel
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	if err := s.updater.Apply(ctx, channel); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"ok":              true,
+		"channel":         channel,
+		"requiresRestart": true,
+	})
+}
+
+func (s *Server) handleAdminRestart(w http.ResponseWriter, r *http.Request) {
+	if s.onRestart == nil {
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "restart not supported in this process"})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true, "restarting": true})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		s.onRestart()
+	}()
 }
 
 func (s *Server) requireAdmin(next http.Handler) http.Handler {

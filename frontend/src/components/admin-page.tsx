@@ -14,6 +14,7 @@ import { ScrollArea } from "./ui/scroll-area"
 import { Switch } from "./ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { Textarea } from "./ui/textarea"
+import { UpdatePanel } from "./update-panel"
 
 type Notice = {
   tone: "success" | "error" | "warning"
@@ -370,6 +371,9 @@ export function AdminPage({ data }: { data: AdminPageData }) {
             </TabsTrigger>
             <TabsTrigger value="providers">
               <TabLabel count={data.providers.length} label="模型接入" />
+            </TabsTrigger>
+            <TabsTrigger value="system">
+              <TabLabel label="系统" />
             </TabsTrigger>
           </TabsList>
 
@@ -737,6 +741,12 @@ export function AdminPage({ data }: { data: AdminPageData }) {
               </section>
             </div>
           </TabsContent>
+
+          {/* ── System ── */}
+          <TabsContent className="space-y-5" value="system">
+            <SectionLead eyebrow="System" title="系统与升级" description="查看当前构建信息并检查 OTA 更新。" />
+            <UpdatePanel />
+          </TabsContent>
         </Tabs>
       </div>
     </AppFrame>
@@ -944,11 +954,13 @@ function StatText({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-function TabLabel({ label, count }: { label: string; count: number }) {
+function TabLabel({ label, count }: { label: string; count?: number }) {
   return (
     <span className="inline-flex items-center gap-1.5">
       <span>{label}</span>
-      <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">{count}</span>
+      {count !== undefined ? (
+        <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">{count}</span>
+      ) : null}
     </span>
   )
 }
