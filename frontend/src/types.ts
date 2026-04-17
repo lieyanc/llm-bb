@@ -127,6 +127,18 @@ export interface Summary {
   created_at: string
 }
 
+export interface Relationship {
+  id: number
+  source_persona_id: number
+  target_persona_id: number
+  affinity: number
+  hostility: number
+  respect: number
+  focus_weight: number
+  notes: string
+  updated_at: string
+}
+
 export interface HomePageData {
   rooms: RoomOverview[]
   totalRooms: number
@@ -150,6 +162,7 @@ export interface AdminPageData {
   personas: Persona[]
   factions: Faction[]
   providers: ProviderConfig[]
+  relationships: Relationship[]
   adminOpen: boolean
   roomMembers: Record<string, RoomMemberView[]>
   runningRooms: number

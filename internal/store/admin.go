@@ -566,6 +566,118 @@ func (s *Store) SeedDemoData(ctx context.Context) error {
 	return s.CreateMessage(ctx, &systemMessage)
 }
 
+func (s *Store) DeleteProvider(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete provider: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE personas SET provider_config_id = 0 WHERE provider_config_id = ?`, id); err != nil {
+		return fmt.Errorf("unlink personas from provider: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM provider_configs WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete provider: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeleteFaction(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete faction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE personas SET faction_id = 0 WHERE faction_id = ?`, id); err != nil {
+		return fmt.Errorf("unlink personas from faction: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM factions WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete faction: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeletePersona(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete persona: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM room_members WHERE persona_id = ?`, id); err != nil {
+		return fmt.Errorf("remove persona from rooms: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM relationships WHERE source_persona_id = ? OR target_persona_id = ?`, id, id); err != nil {
+		return fmt.Errorf("remove persona relationships: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM personas WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete persona: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeleteRoom(ctx context.Context, id int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete room: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE room_id = ?`, id); err != nil {
+		return fmt.Errorf("delete room messages: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM summaries WHERE room_id = ?`, id); err != nil {
+		return fmt.Errorf("delete room summaries: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM room_members WHERE room_id = ?`, id); err != nil {
+		return fmt.Errorf("delete room members: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM rooms WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete room: %w", err)
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ListAllRelationships(ctx context.Context) ([]model.Relationship, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			id,
+			source_persona_id,
+			target_persona_id,
+			affinity,
+			hostility,
+			respect,
+			focus_weight,
+			notes,
+			updated_at
+		FROM relationships
+		ORDER BY id ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list relationships: %w", err)
+	}
+	defer rows.Close()
+
+	var relationships []model.Relationship
+	for rows.Next() {
+		r, err := scanRelationship(rows)
+		if err != nil {
+			return nil, err
+		}
+		relationships = append(relationships, r)
+	}
+	return relationships, rows.Err()
+}
+
+func (s *Store) DeleteRelationship(ctx context.Context, id int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM relationships WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete relationship: %w", err)
+	}
+	return nil
+}
+
 type patchConverter func(value any) (column string, arg any, err error)
 
 func patchString(column string) patchConverter {

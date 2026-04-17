@@ -18,3 +18,22 @@ export async function postJSON<T>(input: RequestInfo | URL, payload?: unknown, i
     ...init,
   })
 }
+
+export async function patchJSON<T>(input: RequestInfo | URL, payload?: unknown, init?: RequestInit): Promise<T> {
+  return fetchJSON<T>(input, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+    ...init,
+  })
+}
+
+export async function deleteJSON<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
+  return fetchJSON<T>(input, {
+    method: "DELETE",
+    ...init,
+  })
+}

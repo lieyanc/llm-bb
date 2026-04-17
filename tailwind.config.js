@@ -7,7 +7,7 @@ module.exports = {
       center: true,
       padding: "1rem",
       screens: {
-        "2xl": "1440px",
+        "2xl": "1280px",
       },
     },
     extend: {
@@ -65,36 +65,11 @@ module.exports = {
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 6px)",
-      },
-      boxShadow: {
-        panel: "0 24px 80px rgba(74, 40, 18, 0.12)",
-        float: "0 18px 48px rgba(74, 40, 18, 0.1)",
-        glow: "0 0 0 1px rgba(214, 103, 51, 0.16), 0 20px 60px rgba(214, 103, 51, 0.12)",
+        sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["IBM Plex Sans", "PingFang SC", "Noto Sans CJK SC", "sans-serif"],
-        display: ["Space Grotesk", "IBM Plex Sans", "PingFang SC", "sans-serif"],
-        mono: ["IBM Plex Mono", "SFMono-Regular", "Menlo", "monospace"],
-      },
-      keyframes: {
-        float: {
-          "0%, 100%": { transform: "translateY(0px)" },
-          "50%": { transform: "translateY(-6px)" },
-        },
-        marquee: {
-          "0%": { transform: "translateX(0)" },
-          "100%": { transform: "translateX(-50%)" },
-        },
-        pulseSoft: {
-          "0%, 100%": { opacity: "1" },
-          "50%": { opacity: ".58" },
-        },
-      },
-      animation: {
-        float: "float 9s ease-in-out infinite",
-        marquee: "marquee 22s linear infinite",
-        "pulse-soft": "pulseSoft 2.4s ease-in-out infinite",
+        sans: ["Inter", "PingFang SC", "Noto Sans CJK SC", "sans-serif"],
+        mono: ["JetBrains Mono", "SFMono-Regular", "Menlo", "monospace"],
       },
     },
   },

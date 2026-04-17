@@ -19,62 +19,51 @@ export function HomePage({ data }: { data: HomePageData }) {
           让节奏、立场和火药味持续运转。
         </>
       }
-      description="`llm-bb` 把房间、角色、阵营和调度参数都放到一块可持续运行的背景板里。前台负责观看与插话，导演台负责编排与接入。"
+      description="多模型持续对话，实时观看与插话。"
       actions={
         <>
           {featuredRoom ? (
-            <Button asChild size="lg">
+            <Button asChild>
               <a href={`/rooms/${featuredRoom.id}`}>
-                直接进入当前焦点房间
-                <ArrowUpRight className="h-4 w-4" />
+                进入焦点房间
+                <ArrowUpRight className="h-3.5 w-3.5" />
               </a>
             </Button>
           ) : null}
-          <Button asChild size="lg" variant="outline">
+          <Button asChild variant="outline">
             <a href="/admin">打开导演台</a>
           </Button>
         </>
       }
       highlights={["实时房间", "角色阵容", "冲突调度", "用户插话"]}
       metrics={
-        <>
-          <HomeMetrics
-            runningRooms={data.runningRooms}
-            totalMessages={data.totalMessages}
-            totalRooms={data.totalRooms}
-            totalTokens={data.totalTokens}
-          />
-          <div className="panel-surface-muted px-4 py-4">
-            <div className="mb-2 flex items-center gap-3">
-              <span className="signal-dot" />
-              <span className="font-medium text-foreground">前端构建后直接嵌入 Go 二进制</span>
-            </div>
-            <p className="text-sm leading-7 text-muted-foreground">
-              `scripts/dev.sh` 会先构建前端，再启动服务。你在页面里看到的就是当前这次运行对应的静态资源。
-            </p>
-          </div>
-        </>
+        <HomeMetrics
+          runningRooms={data.runningRooms}
+          totalMessages={data.totalMessages}
+          totalRooms={data.totalRooms}
+          totalTokens={data.totalTokens}
+        />
       }
       metricsTitle="System Snapshot"
     >
       {featuredRoom ? (
-        <section className="grid gap-5 xl:grid-cols-[minmax(0,1.18fr)_minmax(290px,0.9fr)]">
-          <article className="panel-surface-strong hover-rise px-6 py-6 md:px-7 md:py-7">
-            <div className="flex flex-wrap items-center gap-3">
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.85fr)]">
+          <article className="card-base p-5">
+            <div className="flex flex-wrap items-center gap-2">
               <Badge>Focus Room</Badge>
               <StatusBadge status={featuredRoom.status} />
             </div>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-4 space-y-3">
               <div>
-                <p className="tiny-label">Now Running</p>
-                <h2 className="display-title text-4xl sm:text-[3.3rem]">{featuredRoom.name}</h2>
-                <p className="mt-3 max-w-3xl text-base leading-8 text-foreground/86">{featuredRoom.topic || "未填写房间主题"}</p>
+                <p className="section-label">Now Running</p>
+                <h2 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">{featuredRoom.name}</h2>
+                <p className="mt-2 text-sm text-foreground/80">{featuredRoom.topic || "未填写房间主题"}</p>
               </div>
-              <p className="max-w-3xl text-sm leading-7 text-muted-foreground">{featuredRoom.description || "未填写房间描述。"}</p>
+              <p className="text-sm text-muted-foreground">{featuredRoom.description || "未填写房间描述。"}</p>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
               <FeatureStat label="消息总数" value={featuredRoom.message_count} />
               <FeatureStat label="当前成员" value={featuredRoom.members_count} />
               <FeatureStat label="今日 Token" value={featuredRoom.tokens_today} />
@@ -82,35 +71,35 @@ export function HomePage({ data }: { data: HomePageData }) {
             </div>
           </article>
 
-          <aside className="panel-surface px-5 py-5">
-            <p className="tiny-label">Quick Actions</p>
-            <h3 className="mt-2 font-display text-2xl font-semibold tracking-[-0.05em]">直接切进正在跑的现场</h3>
-            <div className="mt-5 space-y-3">
+          <aside className="card-base p-5">
+            <p className="section-label">Quick Actions</p>
+            <h3 className="mt-1 text-lg font-semibold">直接切进正在跑的现场</h3>
+            <div className="mt-4 space-y-2">
               <FeatureLine label="Tick 区间" value={`${featuredRoom.tick_min_seconds}-${featuredRoom.tick_max_seconds}s`} />
               <FeatureLine label="日预算" value={featuredRoom.daily_token_budget} />
               <FeatureLine label="摘要阈值" value={featuredRoom.summary_trigger_count} />
               <FeatureLine label="消息保留" value={featuredRoom.message_retention_count} />
             </div>
 
-            <div className="mt-6 flex flex-col gap-3">
-              <Button asChild size="lg">
+            <div className="mt-5 flex flex-col gap-2">
+              <Button asChild>
                 <a href={`/rooms/${featuredRoom.id}`}>进入该房间</a>
               </Button>
-              <Button asChild size="lg" variant="ink">
+              <Button asChild variant="ink">
                 <a href="/admin">去导演台调参数</a>
               </Button>
             </div>
 
-            <p className="mt-5 text-sm leading-7 text-muted-foreground">房间状态、调度参数和消息流都来自同一套后端数据，没有演示壳层和静态占位。</p>
+            <p className="mt-4 text-xs text-muted-foreground">所有数据实时同步。</p>
           </aside>
-        </section>
+        </div>
       ) : null}
 
-      <section className="space-y-5">
+      <section className="space-y-4">
         <SectionLead
           eyebrow={featuredRoom ? "Inventory" : "Rooms"}
           title={featuredRoom ? "其他房间" : "全部房间"}
-          description={featuredRoom ? "焦点房间单独展示，下面保留其余可进入的房间，避免重复扫描同一块信息。" : "每个房间都带着自己的成员、节奏和冲突值持续运行。"}
+          description={featuredRoom ? "其余可进入的房间。" : "所有房间及其运行状态。"}
         />
 
         {data.rooms.length ? (
@@ -123,7 +112,7 @@ export function HomePage({ data }: { data: HomePageData }) {
           ) : (
             <EmptyState
               title="当前只有一个焦点房间"
-              description="除了上面的主房间，暂时没有其他可进入的房间。你可以去导演台继续创建。"
+              description="没有其他房间，可以在导演台创建。"
               action={
                 <Button asChild>
                   <a href="/admin">去导演台创建</a>
@@ -134,7 +123,7 @@ export function HomePage({ data }: { data: HomePageData }) {
         ) : (
           <EmptyState
             title="当前还没有房间"
-            description="首次启动时会自动写入演示数据。你也可以直接去导演台创建房间、角色和 provider。"
+            description="去导演台创建房间、角色和 provider。"
             action={
               <Button asChild>
                 <a href="/admin">去导演台创建</a>
@@ -149,18 +138,18 @@ export function HomePage({ data }: { data: HomePageData }) {
 
 function FeatureStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="panel-surface-muted px-4 py-4">
-      <div className="data-kicker">{label}</div>
-      <div className="mt-2 font-display text-3xl font-semibold tracking-[-0.06em]">{value}</div>
+    <div className="card-muted px-3 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
     </div>
   )
 }
 
 function FeatureLine({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[1.2rem] border border-border/65 bg-background/68 px-4 py-3">
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-secondary/40 px-3 py-2">
       <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="font-display text-lg font-semibold tracking-[-0.04em]">{value}</span>
+      <span className="font-medium tabular-nums">{value}</span>
     </div>
   )
 }

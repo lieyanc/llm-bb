@@ -2,13 +2,13 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "../../lib/utils"
 
-const alertVariants = cva("relative w-full rounded-[1.5rem] border px-5 py-4", {
+const alertVariants = cva("relative w-full rounded-lg border p-4", {
   variants: {
     variant: {
-      default: "border-border/70 bg-background/70 text-foreground",
-      warning: "border-warning/20 bg-warning/10 text-warning",
-      error: "border-destructive/20 bg-destructive/10 text-destructive",
-      success: "border-success/20 bg-success/10 text-success",
+      default: "border-border bg-card text-foreground",
+      warning: "border-warning/30 bg-warning/8 text-warning",
+      error: "border-destructive/30 bg-destructive/8 text-destructive",
+      success: "border-success/30 bg-success/8 text-success",
     },
   },
   defaultVariants: {
@@ -26,13 +26,13 @@ Alert.displayName = "Alert"
 
 const AlertTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
   ({ className, ...props }, ref) => (
-    <h5 ref={ref} className={cn("mb-1 font-display text-base font-semibold tracking-[-0.04em]", className)} {...props} />
+    <h5 ref={ref} className={cn("mb-1 text-sm font-semibold", className)} {...props} />
   ),
 )
 AlertTitle.displayName = "AlertTitle"
 
 const AlertDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn("text-sm leading-7", className)} {...props} />,
+  ({ className, ...props }, ref) => <div ref={ref} className={cn("text-sm leading-relaxed", className)} {...props} />,
 )
 AlertDescription.displayName = "AlertDescription"
 

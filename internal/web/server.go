@@ -49,15 +49,16 @@ type roomPageData struct {
 }
 
 type adminPageData struct {
-	Rooms         []model.RoomOverview             `json:"rooms"`
-	Personas      []model.Persona                  `json:"personas"`
-	Factions      []model.Faction                  `json:"factions"`
-	Providers     []model.ProviderConfig           `json:"providers"`
-	AdminOpen     bool                             `json:"adminOpen"`
-	RoomMembers   map[int64][]model.RoomMemberView `json:"roomMembers"`
-	RunningRooms  int                              `json:"runningRooms"`
-	TotalMessages int                              `json:"totalMessages"`
-	TotalTokens   int                              `json:"totalTokens"`
+	Rooms          []model.RoomOverview             `json:"rooms"`
+	Personas       []model.Persona                  `json:"personas"`
+	Factions       []model.Faction                  `json:"factions"`
+	Providers      []model.ProviderConfig           `json:"providers"`
+	Relationships  []model.Relationship             `json:"relationships"`
+	AdminOpen      bool                             `json:"adminOpen"`
+	RoomMembers    map[int64][]model.RoomMemberView `json:"roomMembers"`
+	RunningRooms   int                              `json:"runningRooms"`
+	TotalMessages  int                              `json:"totalMessages"`
+	TotalTokens    int                              `json:"totalTokens"`
 }
 
 type appTemplateData struct {
@@ -124,6 +125,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/admin/providers", s.requireAdmin(http.HandlerFunc(s.handleAdminProvidersList)))
 	mux.Handle("POST /api/admin/providers", s.requireAdmin(http.HandlerFunc(s.handleAdminProviderCreate)))
 	mux.Handle("PATCH /api/admin/providers/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminProviderPatch)))
+
+	mux.Handle("DELETE /api/admin/rooms/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminRoomDelete)))
+	mux.Handle("DELETE /api/admin/personas/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminPersonaDelete)))
+	mux.Handle("DELETE /api/admin/factions/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminFactionDelete)))
+	mux.Handle("DELETE /api/admin/providers/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminProviderDelete)))
+
+	mux.Handle("GET /api/admin/relationships", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipsList)))
+	mux.Handle("POST /api/admin/relationships", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipUpsert)))
+	mux.Handle("DELETE /api/admin/relationships/{id}", s.requireAdmin(http.HandlerFunc(s.handleAdminRelationshipDelete)))
 
 	return s.loggingMiddleware(mux)
 }
@@ -217,6 +227,10 @@ func (s *Server) handleRoomEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Disable write deadline for long-lived SSE connections.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -306,6 +320,11 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	relationships, err := s.store.ListAllRelationships(r.Context())
+	if err != nil {
+		s.writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	roomMembers := make(map[int64][]model.RoomMemberView, len(rooms))
 	for _, room := range rooms {
 		members, err := s.store.ListRoomMembers(r.Context(), room.ID)
@@ -321,6 +340,7 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		Personas:      personas,
 		Factions:      factions,
 		Providers:     providers,
+		Relationships: relationships,
 		AdminOpen:     strings.TrimSpace(s.cfg.AdminPassword) == "",
 		RoomMembers:   roomMembers,
 		RunningRooms:  countRunningRooms(rooms),
@@ -611,6 +631,110 @@ func (s *Server) handleAdminProviderPatch(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := s.store.PatchProvider(r.Context(), providerID, payload); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminRoomDelete(w http.ResponseWriter, r *http.Request) {
+	roomID, err := parsePathInt64(r, "id")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := s.store.DeleteRoom(r.Context(), roomID); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminPersonaDelete(w http.ResponseWriter, r *http.Request) {
+	personaID, err := parsePathInt64(r, "id")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := s.store.DeletePersona(r.Context(), personaID); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminFactionDelete(w http.ResponseWriter, r *http.Request) {
+	factionID, err := parsePathInt64(r, "id")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := s.store.DeleteFaction(r.Context(), factionID); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminProviderDelete(w http.ResponseWriter, r *http.Request) {
+	providerID, err := parsePathInt64(r, "id")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := s.store.DeleteProvider(r.Context(), providerID); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAdminRelationshipsList(w http.ResponseWriter, r *http.Request) {
+	relationships, err := s.store.ListAllRelationships(r.Context())
+	if err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"relationships": relationships})
+}
+
+func (s *Server) handleAdminRelationshipUpsert(w http.ResponseWriter, r *http.Request) {
+	payload, err := readPayload(r)
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	rel := &model.Relationship{
+		SourcePersonaID: int64Value(payload, "source_persona_id"),
+		TargetPersonaID: int64Value(payload, "target_persona_id"),
+		Affinity:        intValueFallback(payload, "affinity", 0),
+		Hostility:       intValueFallback(payload, "hostility", 0),
+		Respect:         intValueFallback(payload, "respect", 0),
+		FocusWeight:     intValueFallback(payload, "focus_weight", 0),
+		Notes:           stringValue(payload, "notes"),
+	}
+	if rel.SourcePersonaID <= 0 || rel.TargetPersonaID <= 0 {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "source and target persona IDs are required"})
+		return
+	}
+	if rel.SourcePersonaID == rel.TargetPersonaID {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "source and target must be different"})
+		return
+	}
+	if err := s.store.UpsertRelationship(r.Context(), rel); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.writeJSON(w, http.StatusCreated, map[string]any{"relationship": rel})
+}
+
+func (s *Server) handleAdminRelationshipDelete(w http.ResponseWriter, r *http.Request) {
+	relID, err := parsePathInt64(r, "id")
+	if err != nil {
+		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if err := s.store.DeleteRelationship(r.Context(), relID); err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
