@@ -4,10 +4,19 @@ import { maskKey, relativeUnix } from "../../shared/lib/format"
 import { EmptyState } from "../../shared/shell"
 import type { ProviderConfig } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
+import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Label } from "../../shared/ui/label"
 import { Switch } from "../../shared/ui/switch"
-import { EntityHeader, Field, RowActions, StatText, SubmitButton } from "../ui"
+import {
+  EntityHeader,
+  Field,
+  FormPanel,
+  FormPanelContent,
+  RowActions,
+  StatText,
+  SubmitButton,
+} from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 const emptyDraft = {
@@ -65,8 +74,8 @@ export function ProvidersSection({
       <div className="grid gap-3">
         {providers.length ? (
           providers.map((provider) => (
-            <article key={provider.id} className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-start justify-between gap-2">
+            <Card key={provider.id}>
+              <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="truncate text-sm font-semibold">{provider.name}</h3>
@@ -80,75 +89,74 @@ export function ProvidersSection({
                   onEdit={() => startEdit(provider)}
                   onDelete={() => actions.handleDelete("providers", provider.id, provider.name)}
                 />
-              </div>
-              <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-                <StatText label="默认模型" value={provider.default_model || "-"} />
-                <StatText label="超时(ms)" value={provider.timeout_ms} />
-                <StatText label="API Key" value={maskKey(provider.api_key)} />
-                <StatText
-                  label="更新"
-                  value={relativeUnix(
-                    provider.updated_at ? Math.floor(new Date(provider.updated_at).getTime() / 1000) : 0,
-                  )}
-                />
-              </div>
-            </article>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  <StatText label="默认模型" value={provider.default_model || "-"} />
+                  <StatText label="超时(ms)" value={provider.timeout_ms} />
+                  <StatText label="API Key" value={maskKey(provider.api_key)} />
+                  <StatText
+                    label="更新"
+                    value={relativeUnix(
+                      provider.updated_at ? Math.floor(new Date(provider.updated_at).getTime() / 1000) : 0,
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           ))
         ) : (
-          <EmptyState title="还没有 Provider" description="未配置时使用本地退化生成器。" />
+          <EmptyState title="还没有 Provider" />
         )}
       </div>
 
-      <section className="h-fit rounded-lg border border-border bg-card p-4 xl:sticky xl:top-4">
-        <EntityHeader
-          title="OpenAI 兼容 API"
-          createLabel="创建 Provider"
-          editing={editing}
-          onCancel={cancelEdit}
-        />
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-          <Field label="名称">
-            <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
-          </Field>
-          <Field label="Base URL">
-            <Input
-              placeholder="https://example.com/v1"
-              value={draft.base_url}
-              onChange={(e) => setDraft((c) => ({ ...c, base_url: e.target.value }))}
-            />
-          </Field>
-          <Field label="API Key">
-            <Input
-              value={draft.api_key}
-              onChange={(e) => setDraft((c) => ({ ...c, api_key: e.target.value }))}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="默认模型">
+      <FormPanel>
+        <FormPanelContent>
+          <EntityHeader createLabel="创建 Provider" editing={editing} onCancel={cancelEdit} />
+          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+            <Field label="名称">
+              <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
+            </Field>
+            <Field label="Base URL">
               <Input
-                value={draft.default_model}
-                onChange={(e) => setDraft((c) => ({ ...c, default_model: e.target.value }))}
+                placeholder="https://example.com/v1"
+                value={draft.base_url}
+                onChange={(e) => setDraft((c) => ({ ...c, base_url: e.target.value }))}
               />
             </Field>
-            <Field label="超时(ms)">
+            <Field label="API Key">
               <Input
-                type="number"
-                value={draft.timeout_ms}
-                onChange={(e) => setDraft((c) => ({ ...c, timeout_ms: e.target.value }))}
+                value={draft.api_key}
+                onChange={(e) => setDraft((c) => ({ ...c, api_key: e.target.value }))}
               />
             </Field>
-          </div>
-          <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2">
-            <Label htmlFor="provider-enabled">启用</Label>
-            <Switch
-              id="provider-enabled"
-              checked={draft.enabled}
-              onCheckedChange={(v) => setDraft((c) => ({ ...c, enabled: v }))}
-            />
-          </div>
-          <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
-        </form>
-      </section>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="默认模型">
+                <Input
+                  value={draft.default_model}
+                  onChange={(e) => setDraft((c) => ({ ...c, default_model: e.target.value }))}
+                />
+              </Field>
+              <Field label="超时(ms)">
+                <Input
+                  type="number"
+                  value={draft.timeout_ms}
+                  onChange={(e) => setDraft((c) => ({ ...c, timeout_ms: e.target.value }))}
+                />
+              </Field>
+            </div>
+            <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2">
+              <Label htmlFor="provider-enabled">启用</Label>
+              <Switch
+                id="provider-enabled"
+                checked={draft.enabled}
+                onCheckedChange={(v) => setDraft((c) => ({ ...c, enabled: v }))}
+              />
+            </div>
+            <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
+          </form>
+        </FormPanelContent>
+      </FormPanel>
     </div>
   )
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -24,7 +25,7 @@ type Config struct {
 
 func Load(path string) (Config, error) {
 	cfg := Config{
-		Address:              ":8080",
+		Address:              "127.0.0.1:8080",
 		DatabasePath:         "data/llm-bb.db",
 		AdminUser:            "admin",
 		DefaultLanguage:      "zh-CN",
@@ -49,6 +50,14 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("database path cannot be empty")
 	}
 
+	if strings.TrimSpace(cfg.AdminPassword) == "" && !isLoopbackAddress(cfg.Address) {
+		return Config{}, errors.New("admin password is required when listening on a non-loopback address")
+	}
+
+	if strings.TrimSpace(cfg.AdminPassword) != "" && strings.TrimSpace(cfg.AdminUser) == "" {
+		return Config{}, errors.New("admin user cannot be empty when admin password is set")
+	}
+
 	if cfg.DefaultTimeoutMS <= 0 {
 		cfg.DefaultTimeoutMS = 20000
 	}
@@ -66,6 +75,18 @@ func Load(path string) (Config, error) {
 
 func (c Config) DefaultTimeout() time.Duration {
 	return time.Duration(c.DefaultTimeoutMS) * time.Millisecond
+}
+
+func isLoopbackAddress(address string) bool {
+	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
+	if err != nil {
+		return false
+	}
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 type partialConfig struct {

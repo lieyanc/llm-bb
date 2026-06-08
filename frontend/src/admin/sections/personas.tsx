@@ -3,11 +3,21 @@ import { patchJSON, postJSON } from "../../shared/lib/api"
 import { EmptyState } from "../../shared/shell"
 import type { Faction, Persona, ProviderConfig } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
+import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Label } from "../../shared/ui/label"
 import { Switch } from "../../shared/ui/switch"
 import { Textarea } from "../../shared/ui/textarea"
-import { EntityHeader, Field, RowActions, StatText, SubmitButton, selectClassName } from "../ui"
+import {
+  EntityHeader,
+  Field,
+  FormPanel,
+  FormPanelContent,
+  RowActions,
+  StatText,
+  SubmitButton,
+  selectClassName,
+} from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 function makeEmptyDraft(factions: Faction[], providers: ProviderConfig[]) {
@@ -110,9 +120,10 @@ export function PersonasSection({
         )}
       </div>
 
-      <section className="h-fit rounded-lg border border-border bg-card p-4 xl:sticky xl:top-4">
-        <EntityHeader title="身份、动机、模型" createLabel="创建角色" editing={editing} onCancel={cancelEdit} />
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+      <FormPanel>
+        <FormPanelContent>
+          <EntityHeader createLabel="创建角色" editing={editing} onCancel={cancelEdit} />
+          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
           <Field label="名称">
             <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
           </Field>
@@ -223,9 +234,10 @@ export function PersonasSection({
             />
           </div>
 
-          <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
-        </form>
-      </section>
+            <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
+          </form>
+        </FormPanelContent>
+      </FormPanel>
     </div>
   )
 }
@@ -240,8 +252,8 @@ function PersonaRow({
   onEdit: () => void
 }) {
   return (
-    <article className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-2">
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="truncate text-sm font-semibold">{persona.name}</h3>
@@ -255,16 +267,18 @@ function PersonaRow({
           onEdit={onEdit}
           onDelete={() => actions.handleDelete("personas", persona.id, persona.name)}
         />
-      </div>
-      {persona.speaking_style ? (
-        <p className="mt-2 line-clamp-2 text-sm text-foreground/85">{persona.speaking_style}</p>
-      ) : null}
-      <div className="mt-3 grid gap-1.5 sm:grid-cols-2">
-        <StatText label="temp" value={persona.temperature} />
-        <StatText label="max" value={persona.max_tokens} />
-        <StatText label="攻击" value={persona.aggression} />
-        <StatText label="活跃" value={persona.activity_level} />
-      </div>
-    </article>
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
+        {persona.speaking_style ? (
+          <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">{persona.speaking_style}</p>
+        ) : null}
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          <StatText label="temp" value={persona.temperature} />
+          <StatText label="max" value={persona.max_tokens} />
+          <StatText label="攻击" value={persona.aggression} />
+          <StatText label="活跃" value={persona.activity_level} />
+        </div>
+      </CardContent>
+    </Card>
   )
 }

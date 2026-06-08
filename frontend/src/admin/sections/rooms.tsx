@@ -1,4 +1,4 @@
-import { LoaderCircle, PauseCircle, PlayCircle, RefreshCcw } from "lucide-react"
+import { Eye, LoaderCircle, PauseCircle, PlayCircle, RefreshCcw } from "lucide-react"
 import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { relativeUnix, statusLabel, statusTone } from "../../shared/lib/format"
@@ -6,11 +6,21 @@ import { EmptyState } from "../../shared/shell"
 import type { Persona, RoomMemberView, RoomOverview } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
 import { Button } from "../../shared/ui/button"
+import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Checkbox } from "../../shared/ui/checkbox"
 import { Input } from "../../shared/ui/input"
 import { ScrollArea } from "../../shared/ui/scroll-area"
 import { Textarea } from "../../shared/ui/textarea"
-import { EntityHeader, Field, FormSection, RowActions, StatText, SubmitButton } from "../ui"
+import {
+  EntityHeader,
+  Field,
+  FormPanel,
+  FormPanelContent,
+  FormSection,
+  RowActions,
+  StatText,
+  SubmitButton,
+} from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 const emptyDraft = {
@@ -100,32 +110,28 @@ export function RoomsSection({
             />
           ))
         ) : (
-          <EmptyState title="还没有房间" description="在右侧创建。" />
+          <EmptyState title="还没有房间" />
         )}
       </div>
 
-      <section className="h-fit rounded-lg border border-border bg-card p-4 xl:sticky xl:top-4">
-        <EntityHeader
-          title="创建后立即生效"
-          createLabel="创建房间"
-          editing={editing}
-          onCancel={cancelEdit}
-        />
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-          <FormSection>
-            <Field label="名称">
-              <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
-            </Field>
-            <Field label="主题">
-              <Input value={draft.topic} onChange={(e) => setDraft((c) => ({ ...c, topic: e.target.value }))} />
-            </Field>
-            <Field label="描述">
-              <Textarea
-                value={draft.description}
-                onChange={(e) => setDraft((c) => ({ ...c, description: e.target.value }))}
-              />
-            </Field>
-          </FormSection>
+      <FormPanel>
+        <FormPanelContent>
+          <EntityHeader createLabel="创建房间" editing={editing} onCancel={cancelEdit} />
+          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+            <FormSection>
+              <Field label="名称">
+                <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
+              </Field>
+              <Field label="主题">
+                <Input value={draft.topic} onChange={(e) => setDraft((c) => ({ ...c, topic: e.target.value }))} />
+              </Field>
+              <Field label="描述">
+                <Textarea
+                  value={draft.description}
+                  onChange={(e) => setDraft((c) => ({ ...c, description: e.target.value }))}
+                />
+              </Field>
+            </FormSection>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="热度">
@@ -208,9 +214,10 @@ export function RoomsSection({
             </ScrollArea>
           </div>
 
-          <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
-        </form>
-      </section>
+            <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
+          </form>
+        </FormPanelContent>
+      </FormPanel>
     </div>
   )
 }
@@ -236,8 +243,8 @@ function RoomRow({
     actions.busyAction === `resume-${room.id}`
 
   return (
-    <article className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-start justify-between gap-2">
+    <Card>
+      <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h3 className="truncate text-base font-semibold">{room.name}</h3>
@@ -250,50 +257,53 @@ function RoomRow({
           onDelete={() => actions.handleDelete("rooms", room.id, room.name)}
           extra={
             <>
-              <Button size="sm" variant="outline" asChild>
-                <a href={`/rooms/${room.id}`}>查看</a>
+              <Button size="icon" variant="outline" asChild aria-label="查看">
+                <a href={`/rooms/${room.id}`}>
+                  <Eye className="h-3.5 w-3.5" />
+                </a>
               </Button>
-              <Button size="sm" disabled={busyCtl} onClick={() => runCtl("tick")}>
+              <Button size="icon" disabled={busyCtl} onClick={() => runCtl("tick")} aria-label="Tick">
                 {actions.busyAction === `tick-${room.id}` ? (
                   <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <RefreshCcw className="h-3.5 w-3.5" />
                 )}
-                tick
               </Button>
               {room.status === "paused" ? (
-                <Button size="sm" variant="ink" disabled={busyCtl} onClick={() => runCtl("resume")}>
+                <Button size="icon" variant="ink" disabled={busyCtl} onClick={() => runCtl("resume")} aria-label="恢复">
                   <PlayCircle className="h-3.5 w-3.5" />
                 </Button>
               ) : (
-                <Button size="sm" variant="ink" disabled={busyCtl} onClick={() => runCtl("pause")}>
+                <Button size="icon" variant="ink" disabled={busyCtl} onClick={() => runCtl("pause")} aria-label="暂停">
                   <PauseCircle className="h-3.5 w-3.5" />
                 </Button>
               )}
             </>
           }
         />
-      </div>
+      </CardHeader>
 
-      <div className="mt-3 grid gap-1.5 sm:grid-cols-4">
-        <StatText label="消息" value={room.message_count} />
-        <StatText label="Token" value={room.tokens_today} />
-        <StatText label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
-        <StatText label="活动" value={relativeUnix(room.last_message_at_unix)} />
-      </div>
-
-      {members.length ? (
-        <div className="mt-3 flex flex-wrap gap-1">
-          {members.slice(0, 8).map((m) => (
-            <Badge key={m.id} variant="outline">
-              {m.persona_name}
-            </Badge>
-          ))}
-          {members.length > 8 ? (
-            <span className="px-1 text-xs text-muted-foreground">+{members.length - 8}</span>
-          ) : null}
+      <CardContent className="p-4 pt-0">
+        <div className="grid gap-1.5 sm:grid-cols-4">
+          <StatText label="消息" value={room.message_count} />
+          <StatText label="Token" value={room.tokens_today} />
+          <StatText label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
+          <StatText label="活动" value={relativeUnix(room.last_message_at_unix)} />
         </div>
-      ) : null}
-    </article>
+
+        {members.length ? (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {members.slice(0, 8).map((m) => (
+              <Badge key={m.id} variant="outline">
+                {m.persona_name}
+              </Badge>
+            ))}
+            {members.length > 8 ? (
+              <span className="px-1 text-xs text-muted-foreground">+{members.length - 8}</span>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }

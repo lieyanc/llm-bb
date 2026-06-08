@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log"
 	"path/filepath"
@@ -53,6 +54,25 @@ func TestShutdownWaitsForLoopExit(t *testing.T) {
 	case <-runDone:
 	case <-time.After(2 * time.Second):
 		t.Fatal("scheduler loop did not exit")
+	}
+}
+
+func TestClaimRoomRunRejectsConcurrentRun(t *testing.T) {
+	scheduler := New(
+		nil,
+		nil,
+		stream.NewHub(),
+		config.Config{},
+		log.New(io.Discard, "", 0),
+	)
+
+	if err := scheduler.claimRoomRun(42); err != nil {
+		t.Fatalf("claim room run: %v", err)
+	}
+	defer scheduler.finishRoomRun(42, nil)
+
+	if err := scheduler.claimRoomRun(42); !errors.Is(err, ErrRoomBusy) {
+		t.Fatalf("second claim error = %v, want ErrRoomBusy", err)
 	}
 }
 

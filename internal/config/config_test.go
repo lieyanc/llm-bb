@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -46,5 +47,33 @@ func TestLoadAppliesEnvOverrides(t *testing.T) {
 	}
 	if cfg.SeedDemoData {
 		t.Fatal("seed_demo_data = true, want false")
+	}
+}
+
+func TestLoadRejectsOpenAdminWithoutPassword(t *testing.T) {
+	t.Setenv("LLM_BB_ADDRESS", ":19090")
+	t.Setenv("LLM_BB_DATABASE_PATH", filepath.Join(t.TempDir(), "app.db"))
+	t.Setenv("LLM_BB_ADMIN_PASSWORD", "")
+
+	_, err := Load("")
+	if err == nil {
+		t.Fatal("Load succeeded, want error")
+	}
+	if !strings.Contains(err.Error(), "admin password is required") {
+		t.Fatalf("error = %q, want admin password requirement", err.Error())
+	}
+}
+
+func TestLoadAllowsLoopbackAdminWithoutPassword(t *testing.T) {
+	t.Setenv("LLM_BB_ADDRESS", "127.0.0.1:19090")
+	t.Setenv("LLM_BB_DATABASE_PATH", filepath.Join(t.TempDir(), "app.db"))
+	t.Setenv("LLM_BB_ADMIN_PASSWORD", "")
+
+	cfg, err := Load("")
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+	if cfg.AdminPassword != "" {
+		t.Fatalf("admin_password = %q, want empty", cfg.AdminPassword)
 	}
 }

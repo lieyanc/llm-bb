@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,9 +10,11 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"llm-bb/internal/config"
@@ -24,15 +27,16 @@ import (
 )
 
 type Server struct {
-	cfg         config.Config
-	store       *store.Store
-	scheduler   *scheduler.Scheduler
-	hub         *stream.Hub
-	logger      *log.Logger
-	templates   *template.Template
-	staticFS    fs.FS
-	updater     *update.Client
-	onRestart   func()
+	cfg          config.Config
+	store        *store.Store
+	scheduler    *scheduler.Scheduler
+	hub          *stream.Hub
+	logger       *log.Logger
+	templates    *template.Template
+	staticFS     fs.FS
+	updater      *update.Client
+	onRestart    func()
+	inputLimiter *rateLimiter
 }
 
 type indexPageData struct {
@@ -54,16 +58,16 @@ type roomPageData struct {
 }
 
 type adminPageData struct {
-	Rooms          []model.RoomOverview             `json:"rooms"`
-	Personas       []model.Persona                  `json:"personas"`
-	Factions       []model.Faction                  `json:"factions"`
-	Providers      []model.ProviderConfig           `json:"providers"`
-	Relationships  []model.Relationship             `json:"relationships"`
-	AdminOpen      bool                             `json:"adminOpen"`
-	RoomMembers    map[int64][]model.RoomMemberView `json:"roomMembers"`
-	RunningRooms   int                              `json:"runningRooms"`
-	TotalMessages  int                              `json:"totalMessages"`
-	TotalTokens    int                              `json:"totalTokens"`
+	Rooms         []model.RoomOverview             `json:"rooms"`
+	Personas      []model.Persona                  `json:"personas"`
+	Factions      []model.Faction                  `json:"factions"`
+	Providers     []model.ProviderConfig           `json:"providers"`
+	Relationships []model.Relationship             `json:"relationships"`
+	AdminOpen     bool                             `json:"adminOpen"`
+	RoomMembers   map[int64][]model.RoomMemberView `json:"roomMembers"`
+	RunningRooms  int                              `json:"runningRooms"`
+	TotalMessages int                              `json:"totalMessages"`
+	TotalTokens   int                              `json:"totalTokens"`
 }
 
 type appTemplateData struct {
@@ -98,6 +102,11 @@ func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Sched
 		staticFS:  staticFS,
 		updater:   update.NewClient(),
 		onRestart: onRestart,
+		inputLimiter: newRateLimiter(rateLimiterConfig{
+			Limit:   8,
+			Window:  10 * time.Second,
+			MaxKeys: 1024,
+		}),
 	}, nil
 }
 
@@ -278,6 +287,11 @@ func (s *Server) handleRoomInput(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.inputLimiter.Allow(clientIP(r)) {
+		s.writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "too many messages, please slow down"})
+		return
+	}
+
 	payload, err := readPayload(r)
 	if err != nil {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -291,6 +305,11 @@ func (s *Server) handleRoomInput(w http.ResponseWriter, r *http.Request) {
 	}
 	if len([]rune(content)) > 280 {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "content too long"})
+		return
+	}
+
+	if _, err := s.store.GetRoom(r.Context(), roomID); err != nil {
+		s.writeJSON(w, http.StatusNotFound, map[string]any{"error": "room not found"})
 		return
 	}
 
@@ -477,6 +496,10 @@ func (s *Server) handleAdminRoomTick(w http.ResponseWriter, r *http.Request) {
 	}
 	message, err := s.scheduler.TriggerRoom(r.Context(), roomID)
 	if err != nil {
+		if errors.Is(err, scheduler.ErrRoomBusy) {
+			s.writeJSON(w, http.StatusConflict, map[string]any{"error": "room tick already running"})
+			return
+		}
 		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
@@ -820,13 +843,20 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
-		if !ok || user != s.cfg.AdminUser || pass != s.cfg.AdminPassword {
+		if !ok || !constantTimeEqual(user, s.cfg.AdminUser) || !constantTimeEqual(pass, s.cfg.AdminPassword) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="llm-bb-admin"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func constantTimeEqual(got, want string) bool {
+	if subtle.ConstantTimeCompare([]byte(got), []byte(want)) != 1 {
+		return false
+	}
+	return len(got) == len(want)
 }
 
 func (s *Server) renderApp(w http.ResponseWriter, tmplName, title, page string, data any) {
@@ -891,6 +921,86 @@ func parsePathInt64(r *http.Request, key string) (int64, error) {
 		return 0, fmt.Errorf("invalid id %q", value)
 	}
 	return id, nil
+}
+
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	if strings.TrimSpace(r.RemoteAddr) != "" {
+		return r.RemoteAddr
+	}
+	return "unknown"
+}
+
+type rateLimiterConfig struct {
+	Limit   int
+	Window  time.Duration
+	MaxKeys int
+}
+
+type rateLimiter struct {
+	mu      sync.Mutex
+	limit   int
+	window  time.Duration
+	maxKeys int
+	keys    map[string]rateBucket
+}
+
+type rateBucket struct {
+	start time.Time
+	count int
+}
+
+func newRateLimiter(cfg rateLimiterConfig) *rateLimiter {
+	if cfg.Limit <= 0 {
+		cfg.Limit = 1
+	}
+	if cfg.Window <= 0 {
+		cfg.Window = time.Second
+	}
+	if cfg.MaxKeys <= 0 {
+		cfg.MaxKeys = 1024
+	}
+	return &rateLimiter{
+		limit:   cfg.Limit,
+		window:  cfg.Window,
+		maxKeys: cfg.MaxKeys,
+		keys:    make(map[string]rateBucket),
+	}
+}
+
+func (l *rateLimiter) Allow(key string) bool {
+	if key == "" {
+		key = "unknown"
+	}
+
+	now := time.Now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if len(l.keys) >= l.maxKeys {
+		for existing, bucket := range l.keys {
+			if now.Sub(bucket.start) >= l.window {
+				delete(l.keys, existing)
+			}
+		}
+	}
+
+	bucket := l.keys[key]
+	if bucket.start.IsZero() || now.Sub(bucket.start) >= l.window {
+		l.keys[key] = rateBucket{start: now, count: 1}
+		return true
+	}
+
+	if bucket.count >= l.limit {
+		return false
+	}
+
+	bucket.count++
+	l.keys[key] = bucket
+	return true
 }
 
 func readPayload(r *http.Request) (map[string]any, error) {

@@ -66,6 +66,22 @@ go build -o bin/llm-bb ./cmd/llm-bb
 如果你直接执行 `go build`，编译器只会嵌入当前 `internal/web/static` 目录里已经存在的资源。
 所以在修改了前端代码之后，需要先重新跑一次 `npm run build:ui`。
 
+## CI & OTA
+
+GitHub Actions 会在 PR 和 `master`/`v*` 推送时先执行前端类型检查、前端嵌入资源构建和 Go 测试，然后交叉编译 Linux、macOS、Windows 产物。
+
+- `master` 推送会刷新固定的 `dev` prerelease，并附带 `version.json`。
+- `vX.Y.Z` tag 会发布 stable release。
+- OTA 使用裸二进制资产：`llm-bb-<os>-<arch>[.exe]` 以及对应 `.sha256`。
+- 手动下载安装使用压缩包资产：`llm-bb-<os>-<arch>.tar.gz` 或 `.zip`。
+
+运行中的程序可以通过导演台的「系统 / OTA 更新」检查、下载并替换当前二进制；替换完成后点击重启加载新版本。CLI 也可使用：
+
+```bash
+llm-bb update --channel stable --check
+llm-bb update --channel dev
+```
+
 ## Config
 
 支持 JSON 配置文件和环境变量覆盖，环境变量优先。可通过 `-config` 指定 JSON 配置文件路径，未提供时使用内置默认值。

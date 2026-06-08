@@ -10,10 +10,11 @@ import {
   statusLabel,
   statusTone,
 } from "../shared/lib/format"
-import { EmptyState, Shell } from "../shared/shell"
+import { EmptyState, Panel, Shell } from "../shared/shell"
 import type { Message, RoomMemberView, RoomPageData } from "../shared/types"
 import { Badge } from "../shared/ui/badge"
 import { Button } from "../shared/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card"
 import { Textarea } from "../shared/ui/textarea"
 import { cn } from "../shared/lib/utils"
 
@@ -90,15 +91,14 @@ export function RoomPage({ data }: { data: RoomPageData }) {
         <aside className="space-y-3">
           <RoomMeta data={data} />
           {data.latestSummary ? (
-            <section className="rounded-lg border border-border bg-card p-4">
-              <h2 className="text-sm font-semibold">最近摘要</h2>
-              <p className="mt-2 text-sm leading-relaxed text-foreground/85">{data.latestSummary.content}</p>
-            </section>
+            <Panel title="最近摘要">
+              <p className="text-sm leading-relaxed">{data.latestSummary.content}</p>
+            </Panel>
           ) : null}
         </aside>
 
-        <section className="flex min-h-[600px] flex-col overflow-hidden rounded-lg border border-border bg-card">
-          <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2 text-xs text-muted-foreground">
+        <section className="flex min-h-[600px] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b px-4 py-3 text-sm text-muted-foreground">
             <span>
               {messages.length} / {data.messageCount} 条
             </span>
@@ -139,10 +139,14 @@ export function RoomPage({ data }: { data: RoomPageData }) {
 function RoomMeta({ data }: { data: RoomPageData }) {
   const { room } = data
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-      {room.topic ? <p className="text-sm text-foreground/85">{room.topic}</p> : null}
-      {room.description ? <p className="text-sm text-muted-foreground">{room.description}</p> : null}
-      <div className="grid gap-1.5">
+    <Card>
+      {room.topic || room.description ? (
+        <CardHeader className="p-4">
+          {room.topic ? <CardTitle className="text-sm">{room.topic}</CardTitle> : null}
+          {room.description ? <p className="text-sm text-muted-foreground">{room.description}</p> : null}
+        </CardHeader>
+      ) : null}
+      <CardContent className="grid gap-1.5 p-4 pt-0 first:pt-4">
         <Meta label="成员" value={data.memberCount} />
         <Meta label="消息" value={data.messageCount} />
         <Meta label="今日 Token" value={data.tokensToday} />
@@ -150,8 +154,8 @@ function RoomMeta({ data }: { data: RoomPageData }) {
         <Meta label="冲突值" value={room.conflict_level} />
         <Meta label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
         <Meta label="日预算" value={room.daily_token_budget} />
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -180,11 +184,12 @@ function Composer({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">插一句</h2>
+    <Card>
+      <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-3">
+        <CardTitle className="text-sm">插话</CardTitle>
         <span className="text-xs text-muted-foreground tabular-nums">{countChars(composer)} / 280</span>
-      </div>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
       {members.length ? (
         <div className="flex flex-wrap gap-1.5">
           {members.map((member) => (
@@ -202,7 +207,7 @@ function Composer({
       <form className="space-y-2" onSubmit={onSubmit}>
         <Textarea
           maxLength={280}
-          placeholder="直接输入，或 @ 点名角色"
+          placeholder="@角色"
           value={composer}
           onChange={(event) => onChange(event.target.value)}
         />
@@ -211,16 +216,19 @@ function Composer({
           发送
         </Button>
       </form>
-    </section>
+      </CardContent>
+    </Card>
   )
 }
 
 function Members({ members }: { members: RoomMemberView[] }) {
   if (!members.length) return null
   return (
-    <section className="space-y-2 rounded-lg border border-border bg-card p-4">
-      <h2 className="text-sm font-semibold">角色阵容</h2>
-      <div className="space-y-2">
+    <Card>
+      <CardHeader className="p-4 pb-3">
+        <CardTitle className="text-sm">角色</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 p-4 pt-0">
         {members.map((member) => (
           <div key={member.persona_id} className="flex items-start gap-2">
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold text-primary">
@@ -241,8 +249,8 @@ function Members({ members }: { members: RoomMemberView[] }) {
             </div>
           </div>
         ))}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -262,7 +270,7 @@ function MessageItem({ message }: { message: Message }) {
         : "bg-primary/10 text-primary"
 
   return (
-    <article className={cn("rounded-lg border p-3", tone)}>
+    <article className={cn("rounded-lg border p-3 shadow-sm", tone)}>
       <div className="flex gap-3">
         <div
           className={cn(

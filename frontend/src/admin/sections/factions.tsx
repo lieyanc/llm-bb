@@ -3,9 +3,10 @@ import { patchJSON, postJSON } from "../../shared/lib/api"
 import { EmptyState } from "../../shared/shell"
 import type { Faction } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
+import { Card, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Textarea } from "../../shared/ui/textarea"
-import { EntityHeader, Field, RowActions, SubmitButton } from "../ui"
+import { EntityHeader, Field, FormPanel, FormPanelContent, RowActions, SubmitButton } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 const emptyDraft = {
@@ -60,9 +61,9 @@ export function FactionsSection({
       <div className="grid gap-3">
         {factions.length ? (
           factions.map((faction) => (
-            <article key={faction.id} className="rounded-lg border border-border bg-card p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <Card key={faction.id}>
+              <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4">
+                <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-semibold">{faction.name}</h3>
                     {faction.default_bias ? <Badge variant="secondary">{faction.default_bias}</Badge> : null}
@@ -75,47 +76,49 @@ export function FactionsSection({
                   onEdit={() => startEdit(faction)}
                   onDelete={() => actions.handleDelete("factions", faction.id, faction.name)}
                 />
-              </div>
-            </article>
+              </CardHeader>
+            </Card>
           ))
         ) : (
           <EmptyState title="还没有阵营" />
         )}
       </div>
 
-      <section className="h-fit rounded-lg border border-border bg-card p-4 xl:sticky xl:top-4">
-        <EntityHeader title="短而有辨识度" createLabel="创建阵营" editing={editing} onCancel={cancelEdit} />
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-          <Field label="名称">
-            <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
-          </Field>
-          <Field label="默认偏向">
-            <Input
-              value={draft.default_bias}
-              onChange={(e) => setDraft((c) => ({ ...c, default_bias: e.target.value }))}
-            />
-          </Field>
-          <Field label="描述">
-            <Textarea
-              value={draft.description}
-              onChange={(e) => setDraft((c) => ({ ...c, description: e.target.value }))}
-            />
-          </Field>
-          <Field label="共同价值">
-            <Textarea
-              value={draft.shared_values}
-              onChange={(e) => setDraft((c) => ({ ...c, shared_values: e.target.value }))}
-            />
-          </Field>
-          <Field label="共同话风">
-            <Textarea
-              value={draft.shared_style}
-              onChange={(e) => setDraft((c) => ({ ...c, shared_style: e.target.value }))}
-            />
-          </Field>
-          <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
-        </form>
-      </section>
+      <FormPanel>
+        <FormPanelContent>
+          <EntityHeader createLabel="创建阵营" editing={editing} onCancel={cancelEdit} />
+          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+            <Field label="名称">
+              <Input required value={draft.name} onChange={(e) => setDraft((c) => ({ ...c, name: e.target.value }))} />
+            </Field>
+            <Field label="默认偏向">
+              <Input
+                value={draft.default_bias}
+                onChange={(e) => setDraft((c) => ({ ...c, default_bias: e.target.value }))}
+              />
+            </Field>
+            <Field label="描述">
+              <Textarea
+                value={draft.description}
+                onChange={(e) => setDraft((c) => ({ ...c, description: e.target.value }))}
+              />
+            </Field>
+            <Field label="共同价值">
+              <Textarea
+                value={draft.shared_values}
+                onChange={(e) => setDraft((c) => ({ ...c, shared_values: e.target.value }))}
+              />
+            </Field>
+            <Field label="共同话风">
+              <Textarea
+                value={draft.shared_style}
+                onChange={(e) => setDraft((c) => ({ ...c, shared_style: e.target.value }))}
+              />
+            </Field>
+            <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
+          </form>
+        </FormPanelContent>
+      </FormPanel>
     </div>
   )
 }

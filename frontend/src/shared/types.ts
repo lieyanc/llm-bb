@@ -154,8 +154,10 @@ export interface UpdateCheckResult {
   channel: UpdateChannel
   latestTag: string
   latestName: string
+  latestVersion: string
   latestCommit: string
-  publishedAt: string
+  latestBuildDate: string
+  publishedAt?: string
   notes: string
   assetName: string
   assetSize: number

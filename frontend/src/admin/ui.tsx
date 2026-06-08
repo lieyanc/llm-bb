@@ -1,6 +1,7 @@
 import { LoaderCircle, Pencil, Trash2, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { Button } from "../shared/ui/button"
+import { Card, CardContent } from "../shared/ui/card"
 import { Label } from "../shared/ui/label"
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -16,9 +17,17 @@ export function FormSection({ children }: { children: ReactNode }) {
   return <div className="space-y-3">{children}</div>
 }
 
+export function FormPanel({ children }: { children: ReactNode }) {
+  return <Card className="h-fit xl:sticky xl:top-4">{children}</Card>
+}
+
+export function FormPanelContent({ children }: { children: ReactNode }) {
+  return <CardContent className="p-4">{children}</CardContent>
+}
+
 export function StatText({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between rounded-md border border-border/60 bg-card px-2.5 py-1.5">
+    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-2.5 py-1.5">
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className="text-sm font-medium tabular-nums">{value}</span>
     </div>
@@ -26,13 +35,11 @@ export function StatText({ label, value }: { label: string; value: string | numb
 }
 
 export function EntityHeader({
-  title,
   editing,
   createLabel,
   editLabel,
   onCancel,
 }: {
-  title: string
   editing: { id: number } | null
   createLabel: string
   editLabel?: string
@@ -44,11 +51,10 @@ export function EntityHeader({
         {editing ? `${editLabel ?? "编辑"} #${editing.id}` : createLabel}
       </h2>
       {editing ? (
-        <Button size="sm" variant="ghost" onClick={onCancel}>
-          <X className="h-3.5 w-3.5" />
+        <Button size="icon" variant="ghost" onClick={onCancel} aria-label="取消编辑">
+          <X className="h-4 w-4" />
         </Button>
       ) : null}
-      {!editing ? <span className="text-xs text-muted-foreground">{title}</span> : null}
     </div>
   )
 }
@@ -85,11 +91,11 @@ export function RowActions({
     <div className="flex flex-wrap gap-1.5">
       {extra}
       {onEdit ? (
-        <Button size="sm" variant="outline" onClick={onEdit}>
+        <Button size="icon" variant="outline" onClick={onEdit} aria-label="编辑">
           <Pencil className="h-3.5 w-3.5" />
         </Button>
       ) : null}
-      <Button size="sm" variant="outline" onClick={onDelete}>
+      <Button size="icon" variant="outline" onClick={onDelete} aria-label="删除">
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </div>

@@ -94,7 +94,8 @@ func runUpdateCmd(args []string) error {
 	}
 
 	fmt.Printf("Current: %s (%s, %s)\n", version.Version, version.ShortCommit(), version.Channel)
-	fmt.Printf("Latest:  %s\n", result.LatestTag)
+	fmt.Printf("Latest:  %s\n", result.LatestVersion)
+	fmt.Printf("Tag:     %s\n", result.LatestTag)
 	fmt.Printf("Asset:   %s (%s)\n", result.AssetName, formatBytes(result.AssetSize))
 
 	if !result.UpdateAvailable {

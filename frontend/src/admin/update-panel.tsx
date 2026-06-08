@@ -5,6 +5,7 @@ import type { UpdateChannel, UpdateCheckResult, VersionInfo } from "../shared/ty
 import { Alert, AlertDescription, AlertTitle } from "../shared/ui/alert"
 import { Badge } from "../shared/ui/badge"
 import { Button } from "../shared/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card"
 import { Label } from "../shared/ui/label"
 import { selectClassName } from "./ui"
 
@@ -115,40 +116,46 @@ export function UpdatePanel() {
 
   return (
     <section className="grid gap-4 xl:grid-cols-2">
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold">当前版本</h3>
-        {current ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-            <dt className="text-muted-foreground">版本</dt>
-            <dd className="font-mono">
-              {current.version}
-              <Badge className="ml-2" variant="outline">
-                {current.channel}
-              </Badge>
-            </dd>
-            <dt className="text-muted-foreground">Commit</dt>
-            <dd className="font-mono text-xs">{shortCommit(current.commit)}</dd>
-            <dt className="text-muted-foreground">构建</dt>
-            <dd className="font-mono text-xs">{current.buildDate}</dd>
-            <dt className="text-muted-foreground">平台</dt>
-            <dd className="font-mono text-xs">
-              {current.goos}/{current.goarch}
-            </dd>
-          </dl>
-        ) : (
-          <p className="text-sm text-muted-foreground">加载中…</p>
-        )}
-        {!injected && current ? (
-          <Alert variant="warning">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>本地构建</AlertTitle>
-            <AlertDescription>缺少版本元信息,OTA 升级将替换为 CI 产物。</AlertDescription>
-          </Alert>
-        ) : null}
-      </div>
+      <Card>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-sm">当前版本</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0">
+          {current ? (
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+              <dt className="text-muted-foreground">版本</dt>
+              <dd className="font-mono">
+                {current.version}
+                <Badge className="ml-2" variant="outline">
+                  {current.channel}
+                </Badge>
+              </dd>
+              <dt className="text-muted-foreground">Commit</dt>
+              <dd className="font-mono text-xs">{shortCommit(current.commit)}</dd>
+              <dt className="text-muted-foreground">构建</dt>
+              <dd className="font-mono text-xs">{current.buildDate}</dd>
+              <dt className="text-muted-foreground">平台</dt>
+              <dd className="font-mono text-xs">
+                {current.goos}/{current.goarch}
+              </dd>
+            </dl>
+          ) : (
+            <p className="text-sm text-muted-foreground">加载中</p>
+          )}
+          {!injected && current ? (
+            <Alert variant="warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>本地构建</AlertTitle>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
-      <div className="space-y-3 rounded-lg border border-border bg-card p-4">
-        <h3 className="text-sm font-semibold">OTA 更新</h3>
+      <Card>
+        <CardHeader className="p-4 pb-3">
+          <CardTitle className="text-sm">更新</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 p-4 pt-0">
 
         <div className="space-y-1.5">
           <Label htmlFor="update-channel">通道</Label>
@@ -197,7 +204,7 @@ export function UpdatePanel() {
         {check ? (
           <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono">{check.latestTag}</span>
+              <span className="font-mono">{check.latestVersion || check.latestTag}</span>
               <Badge variant={check.updateAvailable ? "default" : "outline"}>
                 {check.updateAvailable ? "有更新" : "已最新"}
               </Badge>
@@ -206,10 +213,18 @@ export function UpdatePanel() {
               <p className="text-xs text-muted-foreground">{new Date(check.publishedAt).toLocaleString()}</p>
             ) : null}
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+              <dt className="text-muted-foreground">Tag</dt>
+              <dd className="font-mono">{check.latestTag}</dd>
               <dt className="text-muted-foreground">Asset</dt>
               <dd className="break-all font-mono">{check.assetName}</dd>
               <dt className="text-muted-foreground">大小</dt>
               <dd className="font-mono">{formatBytes(check.assetSize)}</dd>
+              {check.latestBuildDate ? (
+                <>
+                  <dt className="text-muted-foreground">构建</dt>
+                  <dd className="font-mono">{check.latestBuildDate}</dd>
+                </>
+              ) : null}
               {check.latestCommit ? (
                 <>
                   <dt className="text-muted-foreground">Commit</dt>
@@ -229,7 +244,6 @@ export function UpdatePanel() {
           <Alert variant="success">
             <CheckCircle2 className="h-4 w-4" />
             <AlertTitle>已替换</AlertTitle>
-            <AlertDescription>点击"重启"加载新版本。</AlertDescription>
           </Alert>
         ) : null}
 
@@ -249,7 +263,8 @@ export function UpdatePanel() {
             </AlertDescription>
           </Alert>
         ) : null}
-      </div>
+        </CardContent>
+      </Card>
     </section>
   )
 }

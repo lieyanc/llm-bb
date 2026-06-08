@@ -2,9 +2,19 @@ import { type FormEvent, useState } from "react"
 import { postJSON } from "../../shared/lib/api"
 import { EmptyState } from "../../shared/shell"
 import type { Persona, Relationship } from "../../shared/types"
+import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Textarea } from "../../shared/ui/textarea"
-import { Field, FormSection, RowActions, StatText, SubmitButton, selectClassName } from "../ui"
+import {
+  Field,
+  FormPanel,
+  FormPanelContent,
+  FormSection,
+  RowActions,
+  StatText,
+  SubmitButton,
+  selectClassName,
+} from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 const emptyDraft = {
@@ -53,23 +63,25 @@ export function RelationshipsSection({
             const src = personaMap.get(rel.source_persona_id) ?? `#${rel.source_persona_id}`
             const dst = personaMap.get(rel.target_persona_id) ?? `#${rel.target_persona_id}`
             return (
-              <article key={rel.id} className="rounded-lg border border-border bg-card p-4">
-                <div className="flex items-start justify-between gap-2">
+              <Card key={rel.id}>
+                <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
                   <h3 className="text-sm font-semibold">
                     {src} → {dst}
                   </h3>
                   <RowActions
                     onDelete={() => actions.handleDelete("relationships", rel.id, `${src} → ${dst}`)}
                   />
-                </div>
-                {rel.notes ? <p className="mt-1 text-sm text-muted-foreground">{rel.notes}</p> : null}
-                <div className="mt-3 grid gap-1.5 sm:grid-cols-4">
-                  <StatText label="亲近" value={rel.affinity} />
-                  <StatText label="敌意" value={rel.hostility} />
-                  <StatText label="尊重" value={rel.respect} />
-                  <StatText label="权重" value={rel.focus_weight} />
-                </div>
-              </article>
+                </CardHeader>
+                <CardContent className="p-4 pt-0">
+                  {rel.notes ? <p className="mb-3 text-sm text-muted-foreground">{rel.notes}</p> : null}
+                  <div className="grid gap-1.5 sm:grid-cols-4">
+                    <StatText label="亲近" value={rel.affinity} />
+                    <StatText label="敌意" value={rel.hostility} />
+                    <StatText label="尊重" value={rel.respect} />
+                    <StatText label="权重" value={rel.focus_weight} />
+                  </div>
+                </CardContent>
+              </Card>
             )
           })
         ) : (
@@ -77,42 +89,42 @@ export function RelationshipsSection({
         )}
       </div>
 
-      <section className="h-fit rounded-lg border border-border bg-card p-4 xl:sticky xl:top-4">
-        <h2 className="text-base font-semibold">配置关系</h2>
-        <p className="mt-1 text-xs text-muted-foreground">相同来源/目标会覆盖</p>
-        <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
-          <FormSection>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="来源">
-                <select
-                  className={selectClassName}
-                  required
-                  value={draft.source_persona_id}
-                  onChange={(e) => setDraft((c) => ({ ...c, source_persona_id: e.target.value }))}
-                >
-                  <option value="">选择</option>
-                  {personas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="目标">
-                <select
-                  className={selectClassName}
-                  required
-                  value={draft.target_persona_id}
-                  onChange={(e) => setDraft((c) => ({ ...c, target_persona_id: e.target.value }))}
-                >
-                  <option value="">选择</option>
-                  {personas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+      <FormPanel>
+        <FormPanelContent>
+          <h2 className="text-base font-semibold">配置关系</h2>
+          <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
+            <FormSection>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="来源">
+                  <select
+                    className={selectClassName}
+                    required
+                    value={draft.source_persona_id}
+                    onChange={(e) => setDraft((c) => ({ ...c, source_persona_id: e.target.value }))}
+                  >
+                    <option value="">选择</option>
+                    {personas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="目标">
+                  <select
+                    className={selectClassName}
+                    required
+                    value={draft.target_persona_id}
+                    onChange={(e) => setDraft((c) => ({ ...c, target_persona_id: e.target.value }))}
+                  >
+                    <option value="">选择</option>
+                    {personas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               <Field label="亲近">
                 <Input
                   type="number"
@@ -148,10 +160,11 @@ export function RelationshipsSection({
                 onChange={(e) => setDraft((c) => ({ ...c, notes: e.target.value }))}
               />
             </Field>
-          </FormSection>
-          <SubmitButton busy={Boolean(busy)} editing={false} createLabel="保存" />
-        </form>
-      </section>
+            </FormSection>
+            <SubmitButton busy={Boolean(busy)} editing={false} createLabel="保存" />
+          </form>
+        </FormPanelContent>
+      </FormPanel>
     </div>
   )
 }

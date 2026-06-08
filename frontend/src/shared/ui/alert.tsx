@@ -5,10 +5,10 @@ import { cn } from "../lib/utils"
 const alertVariants = cva("relative w-full rounded-lg border p-4", {
   variants: {
     variant: {
-      default: "border-border bg-card text-foreground",
-      warning: "border-warning/30 bg-warning/8 text-warning",
-      error: "border-destructive/30 bg-destructive/8 text-destructive",
-      success: "border-success/30 bg-success/8 text-success",
+      default: "bg-background text-foreground",
+      warning: "border-warning/40 bg-warning/10 text-foreground [&_svg]:text-warning",
+      error: "border-destructive/40 bg-destructive/10 text-foreground [&_svg]:text-destructive",
+      success: "border-success/40 bg-success/10 text-foreground [&_svg]:text-success",
     },
   },
   defaultVariants: {
@@ -32,7 +32,9 @@ const AlertTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTM
 AlertTitle.displayName = "AlertTitle"
 
 const AlertDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn("text-sm leading-relaxed", className)} {...props} />,
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={cn("text-sm leading-relaxed text-muted-foreground", className)} {...props} />
+  ),
 )
 AlertDescription.displayName = "AlertDescription"
 

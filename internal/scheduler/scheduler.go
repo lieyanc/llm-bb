@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"sync"
@@ -31,6 +32,8 @@ type Scheduler struct {
 	loopDone chan struct{}
 	loopRun  bool
 }
+
+var ErrRoomBusy = errors.New("room is already running")
 
 func New(store *store.Store, engine *engine.Engine, hub *stream.Hub, cfg config.Config, logger *log.Logger) *Scheduler {
 	loopDone := make(chan struct{})
@@ -83,12 +86,10 @@ func (s *Scheduler) Run(ctx context.Context) {
 }
 
 func (s *Scheduler) TriggerRoom(ctx context.Context, roomID int64) (*model.Message, error) {
-	s.mu.Lock()
-	closed := s.closed
-	s.mu.Unlock()
-	if closed {
-		return nil, context.Canceled
+	if err := s.claimRoomRun(roomID); err != nil {
+		return nil, err
 	}
+	defer s.finishRoomRun(roomID, nil)
 
 	result, err := s.engine.GenerateNextMessage(ctx, roomID)
 	if err != nil {
@@ -157,24 +158,13 @@ func (s *Scheduler) shouldRun(roomID int64, now time.Time, room model.Room) bool
 }
 
 func (s *Scheduler) startRun(ctx context.Context, room model.Room) {
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
+	if err := s.claimRoomRun(room.ID); err != nil {
 		return
 	}
-	s.running[room.ID] = true
-	s.wg.Add(1)
-	s.mu.Unlock()
 
 	go func() {
 		defer func() {
-			s.mu.Lock()
-			delete(s.running, room.ID)
-			if !s.closed {
-				s.nextRun[room.ID] = time.Now().Add(s.randomDelay(room))
-			}
-			s.mu.Unlock()
-			s.wg.Done()
+			s.finishRoomRun(room.ID, &room)
 		}()
 
 		result, err := s.engine.GenerateNextMessage(ctx, room.ID)
@@ -186,6 +176,35 @@ func (s *Scheduler) startRun(ctx context.Context, room model.Room) {
 			s.hub.Publish(*result.Message)
 		}
 	}()
+}
+
+func (s *Scheduler) claimRoomRun(roomID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.closed {
+		return context.Canceled
+	}
+	if s.running[roomID] {
+		return fmt.Errorf("%w: %d", ErrRoomBusy, roomID)
+	}
+
+	s.running[roomID] = true
+	s.wg.Add(1)
+	return nil
+}
+
+func (s *Scheduler) finishRoomRun(roomID int64, room *model.Room) {
+	s.mu.Lock()
+	defer func() {
+		s.mu.Unlock()
+		s.wg.Done()
+	}()
+
+	delete(s.running, roomID)
+	if !s.closed && room != nil {
+		s.nextRun[roomID] = time.Now().Add(s.randomDelay(*room))
+	}
 }
 
 func (s *Scheduler) Shutdown(ctx context.Context) error {

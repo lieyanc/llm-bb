@@ -38,7 +38,6 @@ export function AdminApp({ data }: { data: AdminPageData }) {
             <LockOpen className="h-4 w-4" />
             未设置管理员口令
           </AlertTitle>
-          <AlertDescription>生产环境请在配置文件中设置 admin_password。</AlertDescription>
         </Alert>
       ) : null}
 

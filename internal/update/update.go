@@ -13,9 +13,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -33,6 +35,11 @@ const (
 	dlTimeout      = 5 * time.Minute
 )
 
+var (
+	githubAPIBaseURL = "https://api.github.com"
+	githubBaseURL    = "https://github.com"
+)
+
 type Release struct {
 	TagName         string    `json:"tag_name"`
 	Name            string    `json:"name"`
@@ -41,6 +48,9 @@ type Release struct {
 	Prerelease      bool      `json:"prerelease"`
 	TargetCommitish string    `json:"target_commitish"`
 	Assets          []Asset   `json:"assets"`
+	Version         string
+	Commit          string
+	BuildDate       string
 }
 
 type Asset struct {
@@ -50,15 +60,17 @@ type Asset struct {
 }
 
 type CheckResult struct {
-	Channel         string    `json:"channel"`
-	LatestTag       string    `json:"latestTag"`
-	LatestName      string    `json:"latestName"`
-	LatestCommit    string    `json:"latestCommit"`
-	PublishedAt     time.Time `json:"publishedAt"`
-	Notes           string    `json:"notes"`
-	AssetName       string    `json:"assetName"`
-	AssetSize       int64     `json:"assetSize"`
-	UpdateAvailable bool      `json:"updateAvailable"`
+	Channel         string     `json:"channel"`
+	LatestTag       string     `json:"latestTag"`
+	LatestName      string     `json:"latestName"`
+	LatestVersion   string     `json:"latestVersion"`
+	LatestCommit    string     `json:"latestCommit"`
+	LatestBuildDate string     `json:"latestBuildDate"`
+	PublishedAt     *time.Time `json:"publishedAt,omitempty"`
+	Notes           string     `json:"notes"`
+	AssetName       string     `json:"assetName"`
+	AssetSize       int64      `json:"assetSize"`
+	UpdateAvailable bool       `json:"updateAvailable"`
 }
 
 type Client struct {
@@ -67,26 +79,59 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
+type versionMetadata struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildDate string `json:"build_date"`
+	BuildTime string `json:"build_time"`
+	Channel   string `json:"channel"`
+	Tag       string `json:"tag"`
+}
+
+type matchedAssets struct {
+	payload    Asset
+	sha        Asset
+	kind       assetKind
+	needsUnzip bool
+}
+
+type assetKind string
+
+const (
+	assetKindBinary  assetKind = "binary"
+	assetKindArchive assetKind = "archive"
+)
+
 func NewClient() *Client {
 	return &Client{
-		Owner:      DefaultOwner,
-		Repo:       DefaultRepo,
-		HTTPClient: &http.Client{Timeout: httpTimeout},
+		Owner: DefaultOwner,
+		Repo:  DefaultRepo,
 	}
+}
+
+func (c *Client) httpClient(timeout time.Duration) *http.Client {
+	if c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	return &http.Client{Timeout: timeout}
 }
 
 func (c *Client) releaseURL(channel string) (string, error) {
 	switch channel {
 	case ChannelDev:
-		return fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/tags/%s", c.Owner, c.Repo, DevTag), nil
+		return fmt.Sprintf("%s/repos/%s/%s/releases/tags/%s", strings.TrimRight(githubAPIBaseURL, "/"), c.Owner, c.Repo, DevTag), nil
 	case ChannelStable, "":
-		return fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", c.Owner, c.Repo), nil
+		return fmt.Sprintf("%s/repos/%s/%s/releases/latest", strings.TrimRight(githubAPIBaseURL, "/"), c.Owner, c.Repo), nil
 	default:
 		return "", fmt.Errorf("unknown channel %q", channel)
 	}
 }
 
 func (c *Client) FetchRelease(ctx context.Context, channel string) (*Release, error) {
+	if normalizeChannel(channel) == ChannelDev {
+		return c.fetchDevRelease(ctx)
+	}
+
 	url, err := c.releaseURL(channel)
 	if err != nil {
 		return nil, err
@@ -99,7 +144,7 @@ func (c *Client) FetchRelease(ctx context.Context, channel string) (*Release, er
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := c.HTTPClient.Do(req)
+	resp, err := c.httpClient(httpTimeout).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("github api request: %w", err)
 	}
@@ -120,8 +165,109 @@ func (c *Client) FetchRelease(ctx context.Context, channel string) (*Release, er
 	return &release, nil
 }
 
-// matchAssets picks the archive + sha256 for the current GOOS/GOARCH.
-func matchAssets(assets []Asset) (archive Asset, sha Asset, err error) {
+func (c *Client) fetchDevRelease(ctx context.Context) (*Release, error) {
+	binaryName := targetName()
+	release := &Release{
+		TagName:    DevTag,
+		Name:       "Development Build",
+		Prerelease: true,
+		Assets: []Asset{
+			{
+				Name:               binaryName,
+				BrowserDownloadURL: c.releaseAssetURL(DevTag, binaryName),
+			},
+			{
+				Name:               binaryName + ".sha256",
+				BrowserDownloadURL: c.releaseAssetURL(DevTag, binaryName+".sha256"),
+			},
+			{
+				Name:               "version.json",
+				BrowserDownloadURL: c.releaseAssetURL(DevTag, "version.json"),
+			},
+		},
+	}
+	if err := c.loadVersionMetadata(ctx, release); err != nil {
+		return nil, err
+	}
+	return release, nil
+}
+
+func (c *Client) releaseAssetURL(tag, assetName string) string {
+	return strings.TrimRight(githubBaseURL, "/") +
+		"/" + url.PathEscape(c.Owner) +
+		"/" + url.PathEscape(c.Repo) +
+		"/releases/download/" + url.PathEscape(tag) +
+		"/" + url.PathEscape(assetName)
+}
+
+func (c *Client) loadVersionMetadata(ctx context.Context, release *Release) error {
+	versionAsset, ok := findAssetByName(release.Assets, "version.json")
+	if !ok {
+		return fmt.Errorf("version.json asset not found in %s release", release.TagName)
+	}
+	data, err := c.download(ctx, versionAsset.BrowserDownloadURL, 16*1024)
+	if err != nil {
+		return fmt.Errorf("download version metadata: %w", err)
+	}
+	var meta versionMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return fmt.Errorf("decode version metadata: %w", err)
+	}
+	if meta.Version = strings.TrimSpace(meta.Version); meta.Version != "" {
+		release.Version = meta.Version
+	}
+	if meta.Commit = strings.TrimSpace(meta.Commit); meta.Commit != "" {
+		release.Commit = meta.Commit
+	}
+	buildDate := strings.TrimSpace(meta.BuildDate)
+	if buildDate == "" {
+		buildDate = strings.TrimSpace(meta.BuildTime)
+	}
+	if buildDate != "" {
+		release.BuildDate = buildDate
+	}
+	if tag := strings.TrimSpace(meta.Tag); tag != "" {
+		release.TagName = tag
+	}
+	if release.TargetCommitish == "" && release.Commit != "" {
+		release.TargetCommitish = release.Commit
+	}
+	return nil
+}
+
+func findAssetByName(assets []Asset, name string) (Asset, bool) {
+	for _, a := range assets {
+		if a.Name == name {
+			return a, true
+		}
+	}
+	return Asset{}, false
+}
+
+func targetName() string {
+	name := fmt.Sprintf("llm-bb-%s-%s", runtime.GOOS, runtime.GOARCH)
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return name
+}
+
+// matchAssets picks the OTA binary + sha256 for the current GOOS/GOARCH.
+// It falls back to the old archive format so existing releases stay usable.
+func matchAssets(assets []Asset) (matchedAssets, error) {
+	binaryName := targetName()
+	if binary, ok := findAssetByName(assets, binaryName); ok {
+		sha, ok := findAssetByName(assets, binaryName+".sha256")
+		if !ok {
+			return matchedAssets{}, fmt.Errorf("no sha256 asset for %s", binaryName)
+		}
+		return matchedAssets{
+			payload: binary,
+			sha:     sha,
+			kind:    assetKindBinary,
+		}, nil
+	}
+
 	archiveExt := ".tar.gz"
 	if runtime.GOOS == "windows" {
 		archiveExt = ".zip"
@@ -129,43 +275,126 @@ func matchAssets(assets []Asset) (archive Asset, sha Asset, err error) {
 	suffixArchive := fmt.Sprintf("-%s-%s%s", runtime.GOOS, runtime.GOARCH, archiveExt)
 	suffixSHA := fmt.Sprintf("-%s-%s.sha256", runtime.GOOS, runtime.GOARCH)
 
-	var foundArchive, foundSHA bool
+	var archive Asset
+	var sha Asset
+	var foundArchive bool
 	for _, a := range assets {
-		switch {
-		case strings.HasSuffix(a.Name, suffixArchive):
+		if strings.HasSuffix(a.Name, suffixArchive) {
 			archive = a
 			foundArchive = true
-		case strings.HasSuffix(a.Name, suffixSHA):
-			sha = a
-			foundSHA = true
 		}
 	}
 	if !foundArchive {
-		return archive, sha, fmt.Errorf("no asset for %s/%s (suffix %s)", runtime.GOOS, runtime.GOARCH, suffixArchive)
+		return matchedAssets{}, fmt.Errorf("no asset for %s/%s (wanted %s or suffix %s)", runtime.GOOS, runtime.GOARCH, binaryName, suffixArchive)
+	}
+
+	var foundSHA bool
+	if exactSHA, ok := findAssetByName(assets, archive.Name+".sha256"); ok {
+		sha = exactSHA
+		foundSHA = true
+	} else {
+		for _, a := range assets {
+			if strings.HasSuffix(a.Name, suffixSHA) {
+				sha = a
+				foundSHA = true
+				break
+			}
+		}
 	}
 	if !foundSHA {
-		return archive, sha, fmt.Errorf("no sha256 asset for %s/%s", runtime.GOOS, runtime.GOARCH)
+		return matchedAssets{}, fmt.Errorf("no sha256 asset for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
-	return archive, sha, nil
+	return matchedAssets{
+		payload:    archive,
+		sha:        sha,
+		kind:       assetKindArchive,
+		needsUnzip: true,
+	}, nil
 }
 
 // isUpdateAvailable compares the current build against a release.
 func isUpdateAvailable(channel, currentCommit, currentVersion string, release *Release) bool {
-	if currentCommit == "" || currentCommit == "unknown" {
-		return true
-	}
-	// Dev channel: compare full commit to release target.
-	if channel == ChannelDev {
-		if release.TargetCommitish == "" {
-			return true
-		}
-		return !strings.EqualFold(release.TargetCommitish, currentCommit)
-	}
-	// Stable channel: compare tag strings.
 	if currentVersion == "" || currentVersion == "dev" {
 		return true
 	}
-	return !strings.EqualFold(release.TagName, currentVersion)
+	if normalizeChannel(channel) == ChannelDev {
+		remoteCommit := normalizeCommit(release.Commit)
+		if remoteCommit == "" {
+			remoteCommit = normalizeCommit(release.TargetCommitish)
+		}
+		currentCommit = normalizeCommit(currentCommit)
+		if remoteCommit != "" && currentCommit != "" {
+			return remoteCommit != currentCommit
+		}
+		remoteVersion := release.DisplayVersion()
+		remoteRun, remoteSHA := parseDevVersion(remoteVersion)
+		localRun, localSHA := parseDevVersion(currentVersion)
+		if remoteSHA != "" && localSHA != "" && remoteSHA == localSHA {
+			return false
+		}
+		if remoteRun > 0 && localRun > 0 {
+			return remoteRun > localRun
+		}
+		return false
+	}
+	return semverGreater(release.TagName, currentVersion)
+}
+
+func (r Release) DisplayVersion() string {
+	if strings.TrimSpace(r.Version) != "" {
+		return strings.TrimSpace(r.Version)
+	}
+	return r.TagName
+}
+
+func normalizeCommit(commit string) string {
+	commit = strings.TrimSpace(commit)
+	if commit == "" || commit == "unknown" {
+		return ""
+	}
+	if len(commit) > 7 {
+		return commit[:7]
+	}
+	return commit
+}
+
+func semverGreater(a, b string) bool {
+	av := parseSemver(strings.TrimPrefix(a, "v"))
+	bv := parseSemver(strings.TrimPrefix(b, "v"))
+	for i := 0; i < 3; i++ {
+		if av[i] > bv[i] {
+			return true
+		}
+		if av[i] < bv[i] {
+			return false
+		}
+	}
+	return false
+}
+
+func parseSemver(s string) [3]int {
+	var result [3]int
+	parts := strings.SplitN(s, ".", 3)
+	for i, p := range parts {
+		if i >= 3 {
+			break
+		}
+		if idx := strings.IndexByte(p, '-'); idx >= 0 {
+			p = p[:idx]
+		}
+		n, _ := strconv.Atoi(p)
+		result[i] = n
+	}
+	return result
+}
+
+func parseDevVersion(v string) (runNumber int, sha string) {
+	parts := strings.SplitN(v, "-", 4)
+	if len(parts) >= 4 && parts[0] == "dev" {
+		n, _ := strconv.Atoi(parts[1])
+		return n, parts[3]
+	}
+	return 0, ""
 }
 
 func (c *Client) Check(ctx context.Context, channel, currentCommit, currentVersion string) (*CheckResult, error) {
@@ -173,19 +402,29 @@ func (c *Client) Check(ctx context.Context, channel, currentCommit, currentVersi
 	if err != nil {
 		return nil, err
 	}
-	archive, _, err := matchAssets(release.Assets)
+	assets, err := matchAssets(release.Assets)
 	if err != nil {
 		return nil, err
+	}
+	latestCommit := release.Commit
+	if latestCommit == "" {
+		latestCommit = release.TargetCommitish
+	}
+	var publishedAt *time.Time
+	if !release.PublishedAt.IsZero() {
+		publishedAt = &release.PublishedAt
 	}
 	return &CheckResult{
 		Channel:         normalizeChannel(channel),
 		LatestTag:       release.TagName,
 		LatestName:      release.Name,
-		LatestCommit:    release.TargetCommitish,
-		PublishedAt:     release.PublishedAt,
+		LatestVersion:   release.DisplayVersion(),
+		LatestCommit:    latestCommit,
+		LatestBuildDate: release.BuildDate,
+		PublishedAt:     publishedAt,
 		Notes:           release.Body,
-		AssetName:       archive.Name,
-		AssetSize:       archive.Size,
+		AssetName:       assets.payload.Name,
+		AssetSize:       assets.payload.Size,
 		UpdateAvailable: isUpdateAvailable(channel, currentCommit, currentVersion, release),
 	}, nil
 }
@@ -196,29 +435,32 @@ func (c *Client) Apply(ctx context.Context, channel string) error {
 	if err != nil {
 		return err
 	}
-	archive, shaAsset, err := matchAssets(release.Assets)
+	assets, err := matchAssets(release.Assets)
 	if err != nil {
 		return err
 	}
 
-	expectedSHA, err := c.downloadSHA(ctx, shaAsset.BrowserDownloadURL)
+	expectedSHA, err := c.downloadSHA(ctx, assets.sha.BrowserDownloadURL)
 	if err != nil {
 		return fmt.Errorf("fetch sha256: %w", err)
 	}
 
-	archiveData, err := c.download(ctx, archive.BrowserDownloadURL)
+	payload, err := c.download(ctx, assets.payload.BrowserDownloadURL, maxArchiveSize)
 	if err != nil {
-		return fmt.Errorf("download archive: %w", err)
+		return fmt.Errorf("download %s: %w", assets.kind, err)
 	}
 
-	actual := sha256.Sum256(archiveData)
+	actual := sha256.Sum256(payload)
 	if !strings.EqualFold(hex.EncodeToString(actual[:]), expectedSHA) {
 		return fmt.Errorf("sha256 mismatch: want %s, got %s", expectedSHA, hex.EncodeToString(actual[:]))
 	}
 
-	binary, err := extractBinary(archive.Name, archiveData)
-	if err != nil {
-		return fmt.Errorf("extract binary: %w", err)
+	binary := payload
+	if assets.needsUnzip {
+		binary, err = extractBinary(assets.payload.Name, payload)
+		if err != nil {
+			return fmt.Errorf("extract binary: %w", err)
+		}
 	}
 	if len(binary) == 0 {
 		return errors.New("extracted binary is empty")
@@ -227,13 +469,12 @@ func (c *Client) Apply(ctx context.Context, channel string) error {
 	return swapBinary(binary)
 }
 
-func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
+func (c *Client) download(ctx context.Context, url string, maxSize int64) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	client := &http.Client{Timeout: dlTimeout}
-	resp, err := client.Do(req)
+	resp, err := c.httpClient(dlTimeout).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +482,11 @@ func (c *Client) download(ctx context.Context, url string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("download %s: status %d", url, resp.StatusCode)
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, maxArchiveSize))
+	return io.ReadAll(io.LimitReader(resp.Body, maxSize))
 }
 
 func (c *Client) downloadSHA(ctx context.Context, url string) (string, error) {
-	data, err := c.download(ctx, url)
+	data, err := c.download(ctx, url, 1024)
 	if err != nil {
 		return "", err
 	}
@@ -265,6 +506,7 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		var firstRegular []byte
 		for _, f := range zr.File {
 			if f.FileInfo().IsDir() {
 				continue
@@ -273,8 +515,23 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			defer rc.Close()
-			return io.ReadAll(io.LimitReader(rc, maxArchiveSize))
+			content, readErr := io.ReadAll(io.LimitReader(rc, maxArchiveSize))
+			closeErr := rc.Close()
+			if readErr != nil {
+				return nil, readErr
+			}
+			if closeErr != nil {
+				return nil, closeErr
+			}
+			if isPreferredBinary(f.Name) {
+				return content, nil
+			}
+			if firstRegular == nil {
+				firstRegular = content
+			}
+		}
+		if firstRegular != nil {
+			return firstRegular, nil
 		}
 		return nil, errors.New("zip contains no files")
 	}
@@ -284,6 +541,7 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 	}
 	defer gzr.Close()
 	tr := tar.NewReader(gzr)
+	var firstRegular []byte
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -295,9 +553,29 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		return io.ReadAll(io.LimitReader(tr, maxArchiveSize))
+		content, err := io.ReadAll(io.LimitReader(tr, maxArchiveSize))
+		if err != nil {
+			return nil, err
+		}
+		if isPreferredBinary(hdr.Name) {
+			return content, nil
+		}
+		if firstRegular == nil {
+			firstRegular = content
+		}
+	}
+	if firstRegular != nil {
+		return firstRegular, nil
 	}
 	return nil, errors.New("tar contains no files")
+}
+
+func isPreferredBinary(name string) bool {
+	want := "llm-bb"
+	if runtime.GOOS == "windows" {
+		want += ".exe"
+	}
+	return filepath.Base(name) == want
 }
 
 func swapBinary(newBinary []byte) error {

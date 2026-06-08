@@ -1,140 +1,279 @@
-name: Build and Release
+name: CI, OTA, and Release
 
 on:
   push:
     branches: [master]
     tags: ['v*']
+  pull_request:
+    branches: [master]
   workflow_dispatch:
 
-permissions:
-  contents: write
+env:
+  VERSION_PKG: llm-bb/internal/version
 
 jobs:
-  build:
-    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+  meta:
+    name: Build Metadata
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      commit: ${{ steps.meta.outputs.commit }}
+      build_date: ${{ steps.meta.outputs.build_date }}
+      channel: ${{ steps.meta.outputs.channel }}
+    steps:
+      - name: Resolve version metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          CHANNEL="dev"
+
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            CHANNEL="stable"
+          elif [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            DATE="$(date -u +'%Y%m%d')"
+            RUN_NUM="$(printf '%04d' "${GITHUB_RUN_NUMBER}")"
+            VERSION="dev-${RUN_NUM}-${DATE}-${SHORT_SHA}"
+          else
+            VERSION="pr-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Type-check frontend
+        run: npm run typecheck:ui
+
+      - name: Build embedded frontend
+        run: npm run build:ui
+
+      - name: Run Go tests
+        run: go test ./...
+
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    needs:
+      - meta
+      - test
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
         include:
-          - goos: linux
+          - target: linux-amd64
+            goos: linux
             goarch: amd64
-          - goos: linux
+            ext: ''
+            archive_ext: .tar.gz
+          - target: linux-arm64
+            goos: linux
             goarch: arm64
-          - goos: darwin
+            ext: ''
+            archive_ext: .tar.gz
+          - target: darwin-amd64
+            goos: darwin
             goarch: amd64
-          - goos: darwin
+            ext: ''
+            archive_ext: .tar.gz
+          - target: darwin-arm64
+            goos: darwin
             goarch: arm64
-          - goos: windows
+            ext: ''
+            archive_ext: .tar.gz
+          - target: windows-amd64
+            goos: windows
             goarch: amd64
             ext: .exe
+            archive_ext: .zip
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          node-version: '20'
-          cache: 'npm'
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: '1.25'
+          go-version-file: go.mod
           cache: true
 
-      - name: Install frontend deps
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build frontend
+      - name: Build embedded frontend
         run: npm run build:ui
 
-      - name: Build binary
+      - name: Build binary and package
         env:
+          CGO_ENABLED: '0'
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: '0'
+          VERSION: ${{ needs.meta.outputs.version }}
+          COMMIT: ${{ needs.meta.outputs.commit }}
+          CHANNEL: ${{ needs.meta.outputs.channel }}
+          BUILD_DATE: ${{ needs.meta.outputs.build_date }}
         run: |
-          set -eu
+          set -euo pipefail
           mkdir -p dist
-          VERSION="${GITHUB_REF_NAME}"
-          CHANNEL="stable"
-          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
-            VERSION="dev-$(git rev-parse --short HEAD)"
-            CHANNEL="dev"
-          fi
-          COMMIT="$(git rev-parse HEAD)"
-          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          LDFLAGS="-s -w"
-          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Version=${VERSION}"
-          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Commit=${COMMIT}"
-          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.Channel=${CHANNEL}"
-          LDFLAGS="$LDFLAGS -X llm-bb/internal/version.BuildDate=${BUILD_DATE}"
-          BASE="llm-bb-${VERSION}-${GOOS}-${GOARCH}"
-          OUT="dist/${BASE}${{ matrix.ext }}"
-          go build -trimpath -ldflags="$LDFLAGS" -o "$OUT" ./cmd/llm-bb
-          cd dist
-          if [ "${GOOS}" = "windows" ]; then
-            zip "${BASE}.zip" "${BASE}${{ matrix.ext }}"
-            rm "${BASE}${{ matrix.ext }}"
-          else
-            tar -czf "${BASE}.tar.gz" "${BASE}"
-            rm "${BASE}"
-          fi
-          sha256sum "${BASE}".* > "${BASE}.sha256"
 
-      - uses: actions/upload-artifact@v4
+          target="${{ matrix.target }}"
+          bin="llm-bb-${target}${{ matrix.ext }}"
+          package_dir="llm-bb-${VERSION}-${target}"
+          archive="llm-bb-${target}${{ matrix.archive_ext }}"
+
+          ldflags="-s -w"
+          ldflags="${ldflags} -X ${VERSION_PKG}.Version=${VERSION}"
+          ldflags="${ldflags} -X ${VERSION_PKG}.Commit=${COMMIT}"
+          ldflags="${ldflags} -X ${VERSION_PKG}.Channel=${CHANNEL}"
+          ldflags="${ldflags} -X ${VERSION_PKG}.BuildDate=${BUILD_DATE}"
+
+          go build -trimpath -ldflags="${ldflags}" -o "dist/${bin}" ./cmd/llm-bb
+
+          (
+            cd dist
+            sha256sum "${bin}" > "${bin}.sha256"
+          )
+
+          mkdir -p "dist/${package_dir}"
+          cp "dist/${bin}" "dist/${package_dir}/llm-bb${{ matrix.ext }}"
+          cp README.md LICENSE "dist/${package_dir}/"
+
+          if [[ "${{ matrix.goos }}" == "windows" ]]; then
+            (
+              cd dist
+              zip -r "${archive}" "${package_dir}"
+              sha256sum "${archive}" > "${archive}.sha256"
+            )
+          else
+            tar -C dist -czf "dist/${archive}" "${package_dir}"
+            (
+              cd dist
+              sha256sum "${archive}" > "${archive}.sha256"
+            )
+          fi
+
+          rm -rf "dist/${package_dir}"
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: llm-bb-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          name: llm-bb-${{ matrix.target }}
+          path: |
+            dist/llm-bb-${{ matrix.target }}${{ matrix.ext }}
+            dist/llm-bb-${{ matrix.target }}${{ matrix.ext }}.sha256
+            dist/llm-bb-${{ matrix.target }}${{ matrix.archive_ext }}
+            dist/llm-bb-${{ matrix.target }}${{ matrix.archive_ext }}.sha256
           if-no-files-found: error
+          retention-days: 3
 
   release-dev:
-    name: Release dev
-    needs: build
-    if: github.ref == 'refs/heads/master'
+    name: Publish Dev OTA Release
     runs-on: ubuntu-latest
+    needs:
+      - meta
+      - build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          path: dist
+          pattern: llm-bb-*
+          path: release
           merge-multiple: true
 
-      - name: Reset dev release and tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add version metadata
         run: |
-          gh release delete dev --cleanup-tag --yes 2>/dev/null || true
+          set -euo pipefail
+          cat > release/version.json <<EOF
+          {
+            "version": "${{ needs.meta.outputs.version }}",
+            "commit": "${{ needs.meta.outputs.commit }}",
+            "build_date": "${{ needs.meta.outputs.build_date }}",
+            "channel": "dev",
+            "tag": "dev"
+          }
+          EOF
 
-      - name: Create dev release
+      - name: Refresh dev tag and prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete dev --repo "${GITHUB_REPOSITORY}" --yes --cleanup-tag || true
+          git tag -f dev "${GITHUB_SHA}"
+          git push --force origin refs/tags/dev
+          gh release create dev release/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Dev Build #${GITHUB_RUN_NUMBER} (${{ needs.meta.outputs.commit }})" \
+            --notes "Dev build for ${GITHUB_SHA}" \
+            --prerelease \
+            --target "${GITHUB_SHA}" \
+            --latest=false
+
+  release-stable:
+    name: Publish Stable Release
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: llm-bb-*
+          path: release
+          merge-multiple: true
+
+      - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: dev
-          name: "Development Build"
-          prerelease: true
-          target_commitish: ${{ github.sha }}
-          body: |
-            Automated development build from `master` at `${{ github.sha }}`.
-
-            **Not for production use.** This tag is force-updated on every push to `master`.
-          files: dist/*
-          fail_on_unmatched_files: true
-
-  release-tag:
-    name: Release tagged version
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          prerelease: false
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          make_latest: true
+          files: release/*
