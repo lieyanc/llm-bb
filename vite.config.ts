@@ -7,17 +7,15 @@ export default defineConfig({
   build: {
     outDir: "internal/web/static",
     emptyOutDir: true,
-    cssCodeSplit: false,
     rollupOptions: {
-      input: path.resolve(__dirname, "frontend/src/main.tsx"),
+      input: {
+        public: path.resolve(__dirname, "frontend/src/public/main.tsx"),
+        admin: path.resolve(__dirname, "frontend/src/admin/main.tsx"),
+      },
       output: {
-        entryFileNames: "app.js",
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith(".css")) {
-            return "app.css"
-          }
-          return "[name][extname]"
-        },
+        entryFileNames: "[name].js",
+        chunkFileNames: "chunks/[name]-[hash].js",
+        assetFileNames: "[name][extname]",
       },
     },
   },

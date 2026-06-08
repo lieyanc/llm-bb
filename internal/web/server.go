@@ -157,7 +157,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.renderApp(w, "llm-bb", "home", indexPageData{
+	s.renderApp(w, "public", "llm-bb", "home", indexPageData{
 		Rooms:         rooms,
 		TotalRooms:    len(rooms),
 		RunningRooms:  countRunningRooms(rooms),
@@ -199,7 +199,7 @@ func (s *Server) handleRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.renderApp(w, fmt.Sprintf("%s - llm-bb", room.Name), "room", roomPageData{
+	s.renderApp(w, "public", fmt.Sprintf("%s - llm-bb", room.Name), "room", roomPageData{
 		Room:          room,
 		Members:       members,
 		Messages:      messages,
@@ -347,7 +347,7 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		roomMembers[room.ID] = members
 	}
 
-	s.renderApp(w, "导演台 - llm-bb", "admin", adminPageData{
+	s.renderApp(w, "admin", "导演台 - llm-bb", "admin", adminPageData{
 		Rooms:         rooms,
 		Personas:      personas,
 		Factions:      factions,
@@ -829,7 +829,7 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) renderApp(w http.ResponseWriter, title, page string, data any) {
+func (s *Server) renderApp(w http.ResponseWriter, tmplName, title, page string, data any) {
 	bootstrap, err := json.Marshal(appBootstrap{
 		Page:  page,
 		Title: title,
@@ -841,7 +841,7 @@ func (s *Server) renderApp(w http.ResponseWriter, title, page string, data any) 
 		return
 	}
 
-	s.renderTemplate(w, "app", appTemplateData{
+	s.renderTemplate(w, tmplName, appTemplateData{
 		Title:     title,
 		Bootstrap: template.JS(bootstrap),
 	})
