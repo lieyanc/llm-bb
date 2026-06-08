@@ -1,4 +1,15 @@
-import { LockOpen } from "lucide-react"
+import {
+  Cable,
+  Flag,
+  Gauge,
+  GitBranch,
+  Home,
+  LockOpen,
+  MessageSquareText,
+  Settings,
+  Theater,
+  UsersRound,
+} from "lucide-react"
 import { MetricGrid, MetricTile, Shell } from "../shared/shell"
 import type { AdminPageData } from "../shared/types"
 import { Alert, AlertDescription, AlertTitle } from "../shared/ui/alert"
@@ -19,17 +30,21 @@ export function AdminApp({ data }: { data: AdminPageData }) {
   return (
     <Shell
       title="导演台"
+      description="管理房间、角色、阵营、关系和模型接入"
       actions={
         <Button asChild variant="outline">
-          <a href="/">返回</a>
+          <a href="/">
+            <Home className="h-4 w-4" />
+            返回
+          </a>
         </Button>
       }
     >
       <MetricGrid>
-        <MetricTile label="房间" value={data.rooms.length} />
-        <MetricTile label="运行中" value={data.runningRooms} />
-        <MetricTile label="角色" value={data.personas.length} />
-        <MetricTile label="累计消息" value={data.totalMessages} />
+        <MetricTile icon={<Theater className="h-4 w-4" />} label="房间" value={data.rooms.length} />
+        <MetricTile icon={<Gauge className="h-4 w-4" />} label="运行中" value={data.runningRooms} />
+        <MetricTile icon={<UsersRound className="h-4 w-4" />} label="角色" value={data.personas.length} />
+        <MetricTile icon={<MessageSquareText className="h-4 w-4" />} label="累计消息" value={data.totalMessages} />
       </MetricGrid>
 
       {data.adminOpen ? (
@@ -53,13 +68,31 @@ export function AdminApp({ data }: { data: AdminPageData }) {
       ) : null}
 
       <Tabs defaultValue="rooms">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="rooms">房间 ({data.rooms.length})</TabsTrigger>
-          <TabsTrigger value="personas">角色 ({data.personas.length})</TabsTrigger>
-          <TabsTrigger value="factions">阵营 ({data.factions.length})</TabsTrigger>
-          <TabsTrigger value="relationships">关系 ({data.relationships?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="providers">接入 ({data.providers.length})</TabsTrigger>
-          <TabsTrigger value="system">系统</TabsTrigger>
+        <TabsList className="w-full justify-start overflow-x-auto rounded-lg">
+          <TabsTrigger value="rooms">
+            <Theater className="h-4 w-4" />
+            房间 ({data.rooms.length})
+          </TabsTrigger>
+          <TabsTrigger value="personas">
+            <UsersRound className="h-4 w-4" />
+            角色 ({data.personas.length})
+          </TabsTrigger>
+          <TabsTrigger value="factions">
+            <Flag className="h-4 w-4" />
+            阵营 ({data.factions.length})
+          </TabsTrigger>
+          <TabsTrigger value="relationships">
+            <GitBranch className="h-4 w-4" />
+            关系 ({data.relationships?.length ?? 0})
+          </TabsTrigger>
+          <TabsTrigger value="providers">
+            <Cable className="h-4 w-4" />
+            接入 ({data.providers.length})
+          </TabsTrigger>
+          <TabsTrigger value="system">
+            <Settings className="h-4 w-4" />
+            系统
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="rooms">

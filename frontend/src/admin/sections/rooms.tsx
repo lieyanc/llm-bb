@@ -2,17 +2,17 @@ import { Eye, LoaderCircle, PauseCircle, PlayCircle, RefreshCcw } from "lucide-r
 import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { relativeUnix, statusLabel, statusTone } from "../../shared/lib/format"
-import { EmptyState } from "../../shared/shell"
+import { EmptyState, PageSection } from "../../shared/shell"
 import type { Persona, RoomMemberView, RoomOverview } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
 import { Button } from "../../shared/ui/button"
-import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Checkbox } from "../../shared/ui/checkbox"
 import { Input } from "../../shared/ui/input"
 import { ScrollArea } from "../../shared/ui/scroll-area"
 import { Textarea } from "../../shared/ui/textarea"
 import {
   EntityHeader,
+  EntityCard,
   Field,
   FormPanel,
   FormPanelContent,
@@ -98,21 +98,23 @@ export function RoomsSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_360px]">
-      <div className="space-y-3">
-        {rooms.length ? (
-          rooms.map((room) => (
-            <RoomRow
-              key={room.id}
-              room={room}
-              members={roomMembers[String(room.id)] || []}
-              actions={actions}
-              onEdit={() => startEdit(room)}
-            />
-          ))
-        ) : (
-          <EmptyState title="还没有房间" />
-        )}
-      </div>
+      <PageSection title="房间列表" description="查看运行状态、手动 tick 或暂停调度">
+        <div className="space-y-3">
+          {rooms.length ? (
+            rooms.map((room) => (
+              <RoomRow
+                key={room.id}
+                room={room}
+                members={roomMembers[String(room.id)] || []}
+                actions={actions}
+                onEdit={() => startEdit(room)}
+              />
+            ))
+          ) : (
+            <EmptyState title="还没有房间" />
+          )}
+        </div>
+      </PageSection>
 
       <FormPanel>
         <FormPanelContent>
@@ -133,86 +135,86 @@ export function RoomsSection({
               </Field>
             </FormSection>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="热度">
-              <Input
-                type="number"
-                value={draft.heat}
-                onChange={(e) => setDraft((c) => ({ ...c, heat: e.target.value }))}
-              />
-            </Field>
-            <Field label="冲突值">
-              <Input
-                type="number"
-                value={draft.conflict_level}
-                onChange={(e) => setDraft((c) => ({ ...c, conflict_level: e.target.value }))}
-              />
-            </Field>
-            <Field label="Tick 最小">
-              <Input
-                type="number"
-                value={draft.tick_min_seconds}
-                onChange={(e) => setDraft((c) => ({ ...c, tick_min_seconds: e.target.value }))}
-              />
-            </Field>
-            <Field label="Tick 最大">
-              <Input
-                type="number"
-                value={draft.tick_max_seconds}
-                onChange={(e) => setDraft((c) => ({ ...c, tick_max_seconds: e.target.value }))}
-              />
-            </Field>
-            <Field label="日预算">
-              <Input
-                type="number"
-                value={draft.daily_token_budget}
-                onChange={(e) => setDraft((c) => ({ ...c, daily_token_budget: e.target.value }))}
-              />
-            </Field>
-            <Field label="摘要阈值">
-              <Input
-                type="number"
-                value={draft.summary_trigger_count}
-                onChange={(e) => setDraft((c) => ({ ...c, summary_trigger_count: e.target.value }))}
-              />
-            </Field>
-          </div>
-
-          <Field label="消息保留">
-            <Input
-              type="number"
-              value={draft.message_retention_count}
-              onChange={(e) => setDraft((c) => ({ ...c, message_retention_count: e.target.value }))}
-            />
-          </Field>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">成员</span>
-              <Badge variant="outline">{selected.length}</Badge>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="热度">
+                <Input
+                  type="number"
+                  value={draft.heat}
+                  onChange={(e) => setDraft((c) => ({ ...c, heat: e.target.value }))}
+                />
+              </Field>
+              <Field label="冲突值">
+                <Input
+                  type="number"
+                  value={draft.conflict_level}
+                  onChange={(e) => setDraft((c) => ({ ...c, conflict_level: e.target.value }))}
+                />
+              </Field>
+              <Field label="Tick 最小">
+                <Input
+                  type="number"
+                  value={draft.tick_min_seconds}
+                  onChange={(e) => setDraft((c) => ({ ...c, tick_min_seconds: e.target.value }))}
+                />
+              </Field>
+              <Field label="Tick 最大">
+                <Input
+                  type="number"
+                  value={draft.tick_max_seconds}
+                  onChange={(e) => setDraft((c) => ({ ...c, tick_max_seconds: e.target.value }))}
+                />
+              </Field>
+              <Field label="日预算">
+                <Input
+                  type="number"
+                  value={draft.daily_token_budget}
+                  onChange={(e) => setDraft((c) => ({ ...c, daily_token_budget: e.target.value }))}
+                />
+              </Field>
+              <Field label="摘要阈值">
+                <Input
+                  type="number"
+                  value={draft.summary_trigger_count}
+                  onChange={(e) => setDraft((c) => ({ ...c, summary_trigger_count: e.target.value }))}
+                />
+              </Field>
             </div>
-            <ScrollArea className="h-[200px] rounded-md border border-border bg-secondary/30 p-2">
-              <div className="space-y-1 pr-3">
-                {personas.map((persona) => {
-                  const checked = selected.includes(persona.id)
-                  return (
-                    <label
-                      key={persona.id}
-                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-secondary/60"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) =>
-                          setSelected((c) => (v ? [...c, persona.id] : c.filter((i) => i !== persona.id)))
-                        }
-                      />
-                      <span className="truncate text-sm">{persona.name}</span>
-                    </label>
-                  )
-                })}
+
+            <Field label="消息保留">
+              <Input
+                type="number"
+                value={draft.message_retention_count}
+                onChange={(e) => setDraft((c) => ({ ...c, message_retention_count: e.target.value }))}
+              />
+            </Field>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">成员</span>
+                <Badge variant="outline">{selected.length}</Badge>
               </div>
-            </ScrollArea>
-          </div>
+              <ScrollArea className="h-[220px] rounded-md border bg-muted/20 p-2">
+                <div className="space-y-1 pr-3">
+                  {personas.map((persona) => {
+                    const checked = selected.includes(persona.id)
+                    return (
+                      <label
+                        key={persona.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) =>
+                            setSelected((c) => (v ? [...c, persona.id] : c.filter((i) => i !== persona.id)))
+                          }
+                        />
+                        <span className="truncate text-sm">{persona.name}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
 
             <SubmitButton busy={Boolean(busy)} editing={Boolean(editing)} />
           </form>
@@ -243,26 +245,22 @@ function RoomRow({
     actions.busyAction === `resume-${room.id}`
 
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate text-base font-semibold">{room.name}</h3>
-            <Badge variant={statusTone(room.status)}>{statusLabel(room.status)}</Badge>
-          </div>
-          {room.topic ? <p className="mt-0.5 truncate text-sm text-muted-foreground">{room.topic}</p> : null}
-        </div>
+    <EntityCard
+      title={room.name}
+      description={room.topic}
+      badges={<Badge variant={statusTone(room.status)}>{statusLabel(room.status)}</Badge>}
+      actions={
         <RowActions
           onEdit={onEdit}
           onDelete={() => actions.handleDelete("rooms", room.id, room.name)}
           extra={
             <>
-              <Button size="icon" variant="outline" asChild aria-label="查看">
+              <Button size="icon-sm" variant="outline" asChild aria-label="查看">
                 <a href={`/rooms/${room.id}`}>
                   <Eye className="h-3.5 w-3.5" />
                 </a>
               </Button>
-              <Button size="icon" disabled={busyCtl} onClick={() => runCtl("tick")} aria-label="Tick">
+              <Button size="icon-sm" disabled={busyCtl} onClick={() => runCtl("tick")} aria-label="Tick">
                 {actions.busyAction === `tick-${room.id}` ? (
                   <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
                 ) : (
@@ -270,40 +268,38 @@ function RoomRow({
                 )}
               </Button>
               {room.status === "paused" ? (
-                <Button size="icon" variant="ink" disabled={busyCtl} onClick={() => runCtl("resume")} aria-label="恢复">
+                <Button size="icon-sm" variant="ink" disabled={busyCtl} onClick={() => runCtl("resume")} aria-label="恢复">
                   <PlayCircle className="h-3.5 w-3.5" />
                 </Button>
               ) : (
-                <Button size="icon" variant="ink" disabled={busyCtl} onClick={() => runCtl("pause")} aria-label="暂停">
+                <Button size="icon-sm" variant="ink" disabled={busyCtl} onClick={() => runCtl("pause")} aria-label="暂停">
                   <PauseCircle className="h-3.5 w-3.5" />
                 </Button>
               )}
             </>
           }
         />
-      </CardHeader>
+      }
+    >
+      <div className="grid gap-1.5 sm:grid-cols-4">
+        <StatText label="消息" value={room.message_count} />
+        <StatText label="Token" value={room.tokens_today} />
+        <StatText label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
+        <StatText label="活动" value={relativeUnix(room.last_message_at_unix)} />
+      </div>
 
-      <CardContent className="p-4 pt-0">
-        <div className="grid gap-1.5 sm:grid-cols-4">
-          <StatText label="消息" value={room.message_count} />
-          <StatText label="Token" value={room.tokens_today} />
-          <StatText label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
-          <StatText label="活动" value={relativeUnix(room.last_message_at_unix)} />
+      {members.length ? (
+        <div className="mt-3 flex flex-wrap gap-1">
+          {members.slice(0, 8).map((m) => (
+            <Badge key={m.id} variant="outline">
+              {m.persona_name}
+            </Badge>
+          ))}
+          {members.length > 8 ? (
+            <span className="px-1 text-xs text-muted-foreground">+{members.length - 8}</span>
+          ) : null}
         </div>
-
-        {members.length ? (
-          <div className="mt-3 flex flex-wrap gap-1">
-            {members.slice(0, 8).map((m) => (
-              <Badge key={m.id} variant="outline">
-                {m.persona_name}
-              </Badge>
-            ))}
-            {members.length > 8 ? (
-              <span className="px-1 text-xs text-muted-foreground">+{members.length - 8}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </CardContent>
-    </Card>
+      ) : null}
+    </EntityCard>
   )
 }

@@ -1,11 +1,11 @@
 import { type FormEvent, useState } from "react"
 import { postJSON } from "../../shared/lib/api"
-import { EmptyState } from "../../shared/shell"
+import { EmptyState, PageSection } from "../../shared/shell"
 import type { Persona, Relationship } from "../../shared/types"
-import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Textarea } from "../../shared/ui/textarea"
 import {
+  EntityCard,
   Field,
   FormPanel,
   FormPanelContent,
@@ -57,37 +57,37 @@ export function RelationshipsSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-      <div className="grid gap-3">
-        {relationships.length ? (
-          relationships.map((rel) => {
-            const src = personaMap.get(rel.source_persona_id) ?? `#${rel.source_persona_id}`
-            const dst = personaMap.get(rel.target_persona_id) ?? `#${rel.target_persona_id}`
-            return (
-              <Card key={rel.id}>
-                <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
-                  <h3 className="text-sm font-semibold">
-                    {src} → {dst}
-                  </h3>
-                  <RowActions
-                    onDelete={() => actions.handleDelete("relationships", rel.id, `${src} → ${dst}`)}
-                  />
-                </CardHeader>
-                <CardContent className="p-4 pt-0">
-                  {rel.notes ? <p className="mb-3 text-sm text-muted-foreground">{rel.notes}</p> : null}
+      <PageSection title="关系矩阵" description="调节角色之间的亲近、敌意、尊重和关注权重">
+        <div className="grid gap-3">
+          {relationships.length ? (
+            relationships.map((rel) => {
+              const src = personaMap.get(rel.source_persona_id) ?? `#${rel.source_persona_id}`
+              const dst = personaMap.get(rel.target_persona_id) ?? `#${rel.target_persona_id}`
+              return (
+                <EntityCard
+                  key={rel.id}
+                  title={`${src} -> ${dst}`}
+                  description={rel.notes}
+                  actions={
+                    <RowActions
+                      onDelete={() => actions.handleDelete("relationships", rel.id, `${src} -> ${dst}`)}
+                    />
+                  }
+                >
                   <div className="grid gap-1.5 sm:grid-cols-4">
                     <StatText label="亲近" value={rel.affinity} />
                     <StatText label="敌意" value={rel.hostility} />
                     <StatText label="尊重" value={rel.respect} />
                     <StatText label="权重" value={rel.focus_weight} />
                   </div>
-                </CardContent>
-              </Card>
-            )
-          })
-        ) : (
-          <EmptyState title="还没有关系" />
-        )}
-      </div>
+                </EntityCard>
+              )
+            })
+          ) : (
+            <EmptyState title="还没有关系" />
+          )}
+        </div>
+      </PageSection>
 
       <FormPanel>
         <FormPanelContent>
@@ -125,41 +125,41 @@ export function RelationshipsSection({
                     ))}
                   </select>
                 </Field>
-              <Field label="亲近">
-                <Input
-                  type="number"
-                  value={draft.affinity}
-                  onChange={(e) => setDraft((c) => ({ ...c, affinity: e.target.value }))}
+                <Field label="亲近">
+                  <Input
+                    type="number"
+                    value={draft.affinity}
+                    onChange={(e) => setDraft((c) => ({ ...c, affinity: e.target.value }))}
+                  />
+                </Field>
+                <Field label="敌意">
+                  <Input
+                    type="number"
+                    value={draft.hostility}
+                    onChange={(e) => setDraft((c) => ({ ...c, hostility: e.target.value }))}
+                  />
+                </Field>
+                <Field label="尊重">
+                  <Input
+                    type="number"
+                    value={draft.respect}
+                    onChange={(e) => setDraft((c) => ({ ...c, respect: e.target.value }))}
+                  />
+                </Field>
+                <Field label="关注权重">
+                  <Input
+                    type="number"
+                    value={draft.focus_weight}
+                    onChange={(e) => setDraft((c) => ({ ...c, focus_weight: e.target.value }))}
+                  />
+                </Field>
+              </div>
+              <Field label="备注">
+                <Textarea
+                  value={draft.notes}
+                  onChange={(e) => setDraft((c) => ({ ...c, notes: e.target.value }))}
                 />
               </Field>
-              <Field label="敌意">
-                <Input
-                  type="number"
-                  value={draft.hostility}
-                  onChange={(e) => setDraft((c) => ({ ...c, hostility: e.target.value }))}
-                />
-              </Field>
-              <Field label="尊重">
-                <Input
-                  type="number"
-                  value={draft.respect}
-                  onChange={(e) => setDraft((c) => ({ ...c, respect: e.target.value }))}
-                />
-              </Field>
-              <Field label="关注权重">
-                <Input
-                  type="number"
-                  value={draft.focus_weight}
-                  onChange={(e) => setDraft((c) => ({ ...c, focus_weight: e.target.value }))}
-                />
-              </Field>
-            </div>
-            <Field label="备注">
-              <Textarea
-                value={draft.notes}
-                onChange={(e) => setDraft((c) => ({ ...c, notes: e.target.value }))}
-              />
-            </Field>
             </FormSection>
             <SubmitButton busy={Boolean(busy)} editing={false} createLabel="保存" />
           </form>

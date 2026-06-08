@@ -1,24 +1,34 @@
 import { LoaderCircle, Pencil, Trash2, X } from "lucide-react"
 import type { ReactNode } from "react"
+import { cn } from "../shared/lib/utils"
 import { Button } from "../shared/ui/button"
-import { Card, CardContent } from "../shared/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../shared/ui/card"
 import { Label } from "../shared/ui/label"
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  children,
+  description,
+}: {
+  label: string
+  children: ReactNode
+  description?: ReactNode
+}) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
       {children}
+      {description ? <p className="text-xs leading-relaxed text-muted-foreground">{description}</p> : null}
     </div>
   )
 }
 
 export function FormSection({ children }: { children: ReactNode }) {
-  return <div className="space-y-3">{children}</div>
+  return <div className="space-y-4">{children}</div>
 }
 
-export function FormPanel({ children }: { children: ReactNode }) {
-  return <Card className="h-fit xl:sticky xl:top-4">{children}</Card>
+export function FormPanel({ children, className }: { children: ReactNode; className?: string }) {
+  return <Card className={cn("h-fit xl:sticky xl:top-20", className)}>{children}</Card>
 }
 
 export function FormPanelContent({ children }: { children: ReactNode }) {
@@ -27,9 +37,9 @@ export function FormPanelContent({ children }: { children: ReactNode }) {
 
 export function StatText({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between rounded-md border bg-muted/30 px-2.5 py-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium tabular-nums">{value}</span>
+    <div className="min-w-0 rounded-md border bg-muted/25 px-3 py-2">
+      <div className="truncate text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate text-sm font-medium tabular-nums">{value}</div>
     </div>
   )
 }
@@ -46,12 +56,15 @@ export function EntityHeader({
   onCancel: () => void
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <h2 className="text-base font-semibold">
-        {editing ? `${editLabel ?? "编辑"} #${editing.id}` : createLabel}
-      </h2>
+    <div className="flex items-start justify-between gap-2">
+      <div className="min-w-0">
+        <h2 className="text-base font-semibold tracking-tight">
+          {editing ? editLabel ?? "编辑" : createLabel}
+        </h2>
+        {editing ? <p className="mt-1 text-xs text-muted-foreground">#{editing.id}</p> : null}
+      </div>
       {editing ? (
-        <Button size="icon" variant="ghost" onClick={onCancel} aria-label="取消编辑">
+        <Button size="icon-sm" variant="ghost" onClick={onCancel} aria-label="取消编辑">
           <X className="h-4 w-4" />
         </Button>
       ) : null}
@@ -88,18 +101,51 @@ export function RowActions({
   extra?: ReactNode
 }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
       {extra}
       {onEdit ? (
-        <Button size="icon" variant="outline" onClick={onEdit} aria-label="编辑">
+        <Button size="icon-sm" variant="outline" onClick={onEdit} aria-label="编辑">
           <Pencil className="h-3.5 w-3.5" />
         </Button>
       ) : null}
-      <Button size="icon" variant="outline" onClick={onDelete} aria-label="删除">
+      <Button size="icon-sm" variant="outline" onClick={onDelete} aria-label="删除">
         <Trash2 className="h-3.5 w-3.5" />
       </Button>
     </div>
   )
 }
 
-export const selectClassName = "form-select"
+export function EntityCard({
+  title,
+  description,
+  badges,
+  actions,
+  children,
+  className,
+}: {
+  title: ReactNode
+  description?: ReactNode
+  badges?: ReactNode
+  actions?: ReactNode
+  children?: ReactNode
+  className?: string
+}) {
+  return (
+    <Card className={cn("overflow-hidden", className)}>
+      <CardHeader className="p-4">
+        <div className="min-w-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <CardTitle className="truncate text-sm">{title}</CardTitle>
+            {badges}
+          </div>
+          {description ? <CardDescription className="mt-1 truncate">{description}</CardDescription> : null}
+        </div>
+        {actions ? <CardAction>{actions}</CardAction> : null}
+      </CardHeader>
+      {children ? <CardContent className="p-4 pt-0">{children}</CardContent> : null}
+    </Card>
+  )
+}
+
+export const selectClassName =
+  "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"

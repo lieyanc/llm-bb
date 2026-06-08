@@ -29,7 +29,7 @@ func (s *Store) ListProviders(ctx context.Context) ([]model.ProviderConfig, erro
 	}
 	defer rows.Close()
 
-	var providers []model.ProviderConfig
+	providers := make([]model.ProviderConfig, 0)
 	for rows.Next() {
 		provider, err := scanProvider(rows)
 		if err != nil {
@@ -106,7 +106,7 @@ func (s *Store) ListFactions(ctx context.Context) ([]model.Faction, error) {
 	}
 	defer rows.Close()
 
-	var factions []model.Faction
+	factions := make([]model.Faction, 0)
 	for rows.Next() {
 		faction, err := scanFaction(rows)
 		if err != nil {
@@ -187,7 +187,7 @@ func (s *Store) ListPersonas(ctx context.Context) ([]model.Persona, error) {
 	}
 	defer rows.Close()
 
-	var personas []model.Persona
+	personas := make([]model.Persona, 0)
 	for rows.Next() {
 		persona, err := scanPersona(rows)
 		if err != nil {
@@ -659,7 +659,7 @@ func (s *Store) ListAllRelationships(ctx context.Context) ([]model.Relationship,
 	}
 	defer rows.Close()
 
-	var relationships []model.Relationship
+	relationships := make([]model.Relationship, 0)
 	for rows.Next() {
 		r, err := scanRelationship(rows)
 		if err != nil {

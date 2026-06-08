@@ -221,7 +221,7 @@ func (s *Store) ListRooms(ctx context.Context) ([]model.RoomOverview, error) {
 	}
 	defer rows.Close()
 
-	var rooms []model.RoomOverview
+	rooms := make([]model.RoomOverview, 0)
 	for rows.Next() {
 		room, err := scanRoomOverview(rows)
 		if err != nil {
@@ -263,7 +263,7 @@ func (s *Store) ListRunnableRooms(ctx context.Context) ([]model.Room, error) {
 	}
 	defer rows.Close()
 
-	var rooms []model.Room
+	rooms := make([]model.Room, 0)
 	for rows.Next() {
 		room, err := scanRoom(rows)
 		if err != nil {
@@ -347,7 +347,7 @@ func (s *Store) ListRoomMembers(ctx context.Context, roomID int64) ([]model.Room
 	}
 	defer rows.Close()
 
-	var members []model.RoomMemberView
+	members := make([]model.RoomMemberView, 0)
 	for rows.Next() {
 		member, err := scanRoomMemberView(rows)
 		if err != nil {
@@ -388,7 +388,7 @@ func (s *Store) ListRoomMessages(ctx context.Context, roomID int64, limit int) (
 	}
 	defer rows.Close()
 
-	var reversed []model.Message
+	reversed := make([]model.Message, 0)
 	for rows.Next() {
 		message, err := scanMessage(rows)
 		if err != nil {
@@ -437,7 +437,7 @@ func (s *Store) ListRecentMessagesDescending(ctx context.Context, roomID int64, 
 	}
 	defer rows.Close()
 
-	var messages []model.Message
+	messages := make([]model.Message, 0)
 	for rows.Next() {
 		message, err := scanMessage(rows)
 		if err != nil {
@@ -475,7 +475,7 @@ func (s *Store) GetLatestSummary(ctx context.Context, roomID int64) (*model.Summ
 
 func (s *Store) ListRelationshipsForPersonas(ctx context.Context, personaIDs []int64) ([]model.Relationship, error) {
 	if len(personaIDs) == 0 {
-		return nil, nil
+		return []model.Relationship{}, nil
 	}
 
 	var args []any
@@ -508,7 +508,7 @@ func (s *Store) ListRelationshipsForPersonas(ctx context.Context, personaIDs []i
 	}
 	defer rows.Close()
 
-	var relationships []model.Relationship
+	relationships := make([]model.Relationship, 0)
 	for rows.Next() {
 		relationship, err := scanRelationship(rows)
 		if err != nil {

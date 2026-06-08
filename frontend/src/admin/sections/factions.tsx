@@ -1,12 +1,11 @@
 import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
-import { EmptyState } from "../../shared/shell"
+import { EmptyState, PageSection } from "../../shared/shell"
 import type { Faction } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
-import { Card, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Textarea } from "../../shared/ui/textarea"
-import { EntityHeader, Field, FormPanel, FormPanelContent, RowActions, SubmitButton } from "../ui"
+import { EntityCard, EntityHeader, Field, FormPanel, FormPanelContent, RowActions, SubmitButton } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
 const emptyDraft = {
@@ -58,31 +57,37 @@ export function FactionsSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="grid gap-3">
-        {factions.length ? (
-          factions.map((faction) => (
-            <Card key={faction.id}>
-              <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">{faction.name}</h3>
-                    {faction.default_bias ? <Badge variant="secondary">{faction.default_bias}</Badge> : null}
-                  </div>
-                  {faction.description ? (
-                    <p className="mt-1 text-sm text-foreground/85">{faction.description}</p>
+      <PageSection title="阵营列表" description="沉淀共享价值、话风和默认偏向">
+        <div className="grid gap-3">
+          {factions.length ? (
+            factions.map((faction) => (
+              <EntityCard
+                key={faction.id}
+                title={faction.name}
+                description={faction.description}
+                badges={faction.default_bias ? <Badge variant="secondary">{faction.default_bias}</Badge> : null}
+                actions={
+                  <RowActions
+                    onEdit={() => startEdit(faction)}
+                    onDelete={() => actions.handleDelete("factions", faction.id, faction.name)}
+                  />
+                }
+              >
+                <div className="grid gap-2 text-sm text-muted-foreground md:grid-cols-2">
+                  {faction.shared_values ? (
+                    <p className="line-clamp-2 leading-relaxed">{faction.shared_values}</p>
+                  ) : null}
+                  {faction.shared_style ? (
+                    <p className="line-clamp-2 leading-relaxed">{faction.shared_style}</p>
                   ) : null}
                 </div>
-                <RowActions
-                  onEdit={() => startEdit(faction)}
-                  onDelete={() => actions.handleDelete("factions", faction.id, faction.name)}
-                />
-              </CardHeader>
-            </Card>
-          ))
-        ) : (
-          <EmptyState title="还没有阵营" />
-        )}
-      </div>
+              </EntityCard>
+            ))
+          ) : (
+            <EmptyState title="还没有阵营" />
+          )}
+        </div>
+      </PageSection>
 
       <FormPanel>
         <FormPanelContent>

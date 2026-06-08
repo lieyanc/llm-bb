@@ -1,4 +1,4 @@
-import { Send } from "lucide-react"
+import { ArrowLeft, Bot, Clock, Hash, MessageSquareText, Send, Sparkles, UsersRound } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
 import { postJSON } from "../shared/lib/api"
 import {
@@ -10,11 +10,11 @@ import {
   statusLabel,
   statusTone,
 } from "../shared/lib/format"
-import { EmptyState, Panel, Shell } from "../shared/shell"
+import { EmptyState, MetricGrid, MetricTile, Panel, Shell } from "../shared/shell"
 import type { Message, RoomMemberView, RoomPageData } from "../shared/types"
 import { Badge } from "../shared/ui/badge"
 import { Button } from "../shared/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../shared/ui/card"
 import { Textarea } from "../shared/ui/textarea"
 import { cn } from "../shared/lib/utils"
 
@@ -77,17 +77,32 @@ export function RoomPage({ data }: { data: RoomPageData }) {
   return (
     <Shell
       title={data.room.name}
+      description={data.room.topic || data.room.description || "实时房间"}
       actions={
         <>
           <StreamDot connected={connected} />
           <Badge variant={statusTone(data.room.status)}>{statusLabel(data.room.status)}</Badge>
           <Button asChild variant="outline">
-            <a href="/">返回</a>
+            <a href="/">
+              <ArrowLeft className="h-4 w-4" />
+              返回
+            </a>
           </Button>
         </>
       }
     >
-      <div className="grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)_300px]">
+      <MetricGrid>
+        <MetricTile icon={<UsersRound className="h-4 w-4" />} label="成员" value={data.memberCount} />
+        <MetricTile icon={<MessageSquareText className="h-4 w-4" />} label="消息" value={data.messageCount} />
+        <MetricTile icon={<Sparkles className="h-4 w-4" />} label="今日 Token" value={data.tokensToday} />
+        <MetricTile
+          icon={<Clock className="h-4 w-4" />}
+          label="Tick"
+          value={`${data.room.tick_min_seconds}-${data.room.tick_max_seconds}s`}
+        />
+      </MetricGrid>
+
+      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px]">
         <aside className="space-y-3">
           <RoomMeta data={data} />
           {data.latestSummary ? (
@@ -97,13 +112,16 @@ export function RoomPage({ data }: { data: RoomPageData }) {
           ) : null}
         </aside>
 
-        <section className="flex min-h-[600px] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
-          <div className="flex items-center justify-between gap-3 border-b px-4 py-3 text-sm text-muted-foreground">
-            <span>
-              {messages.length} / {data.messageCount} 条
-            </span>
+        <section className="flex min-h-[640px] flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+          <div className="flex items-center justify-between gap-3 border-b bg-muted/25 px-4 py-3 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <MessageSquareText className="h-4 w-4" />
+              <span>
+                {messages.length} / {data.messageCount} 条
+              </span>
+            </div>
             <Button
-              size="sm"
+              size="xs"
               variant={autoScroll ? "default" : "outline"}
               onClick={() => setAutoScroll((v) => !v)}
             >
@@ -141,19 +159,19 @@ function RoomMeta({ data }: { data: RoomPageData }) {
   return (
     <Card>
       {room.topic || room.description ? (
-        <CardHeader className="p-4">
+        <CardHeader className="p-4 pb-3">
           {room.topic ? <CardTitle className="text-sm">{room.topic}</CardTitle> : null}
-          {room.description ? <p className="text-sm text-muted-foreground">{room.description}</p> : null}
+          {room.description ? (
+            <CardDescription className="col-span-2 leading-relaxed">{room.description}</CardDescription>
+          ) : null}
         </CardHeader>
       ) : null}
       <CardContent className="grid gap-1.5 p-4 pt-0 first:pt-4">
-        <Meta label="成员" value={data.memberCount} />
-        <Meta label="消息" value={data.messageCount} />
-        <Meta label="今日 Token" value={data.tokensToday} />
         <Meta label="热度" value={room.heat} />
         <Meta label="冲突值" value={room.conflict_level} />
-        <Meta label="Tick" value={`${room.tick_min_seconds}-${room.tick_max_seconds}s`} />
         <Meta label="日预算" value={room.daily_token_budget} />
+        <Meta label="摘要阈值" value={room.summary_trigger_count} />
+        <Meta label="消息保留" value={room.message_retention_count} />
       </CardContent>
     </Card>
   )
@@ -184,38 +202,40 @@ function Composer({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0 p-4 pb-3">
+    <Card className="overflow-hidden">
+      <CardHeader className="p-4 pb-3">
         <CardTitle className="text-sm">插话</CardTitle>
-        <span className="text-xs text-muted-foreground tabular-nums">{countChars(composer)} / 280</span>
+        <CardAction>
+          <span className="text-xs text-muted-foreground tabular-nums">{countChars(composer)} / 280</span>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0">
-      {members.length ? (
-        <div className="flex flex-wrap gap-1.5">
-          {members.map((member) => (
-            <Button
-              key={member.persona_id}
-              size="sm"
-              variant="outline"
-              onClick={() => onMention(member.persona_name)}
-            >
-              @{member.persona_name}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-      <form className="space-y-2" onSubmit={onSubmit}>
-        <Textarea
-          maxLength={280}
-          placeholder="@角色"
-          value={composer}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <Button className="w-full" disabled={sending || !composer.trim()} type="submit">
-          <Send className="h-3.5 w-3.5" />
-          发送
-        </Button>
-      </form>
+        {members.length ? (
+          <div className="flex flex-wrap gap-1.5">
+            {members.map((member) => (
+              <Button
+                key={member.persona_id}
+                size="xs"
+                variant="outline"
+                onClick={() => onMention(member.persona_name)}
+              >
+                @{member.persona_name}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <form className="space-y-2" onSubmit={onSubmit}>
+          <Textarea
+            maxLength={280}
+            placeholder="@角色"
+            value={composer}
+            onChange={(event) => onChange(event.target.value)}
+          />
+          <Button className="w-full" disabled={sending || !composer.trim()} type="submit">
+            <Send className="h-3.5 w-3.5" />
+            发送
+          </Button>
+        </form>
       </CardContent>
     </Card>
   )
@@ -224,7 +244,7 @@ function Composer({
 function Members({ members }: { members: RoomMemberView[] }) {
   if (!members.length) return null
   return (
-    <Card>
+    <Card className="overflow-hidden">
       <CardHeader className="p-4 pb-3">
         <CardTitle className="text-sm">角色</CardTitle>
       </CardHeader>
@@ -293,6 +313,20 @@ function MessageItem({ message }: { message: Message }) {
             <time className="text-xs text-muted-foreground">{formatDateTime(message.created_at)}</time>
           </div>
           <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{message.content}</p>
+          {message.prompt_tokens || message.completion_tokens ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Bot className="h-3 w-3" />
+                {message.prompt_tokens + message.completion_tokens} tokens
+              </span>
+              {message.source ? (
+                <span className="inline-flex items-center gap-1">
+                  <Hash className="h-3 w-3" />
+                  {message.source}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
     </article>

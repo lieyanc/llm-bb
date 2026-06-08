@@ -5,7 +5,7 @@ import type { UpdateChannel, UpdateCheckResult, VersionInfo } from "../shared/ty
 import { Alert, AlertDescription, AlertTitle } from "../shared/ui/alert"
 import { Badge } from "../shared/ui/badge"
 import { Button } from "../shared/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card"
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "../shared/ui/card"
 import { Label } from "../shared/ui/label"
 import { selectClassName } from "./ui"
 
@@ -116,20 +116,19 @@ export function UpdatePanel() {
 
   return (
     <section className="grid gap-4 xl:grid-cols-2">
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-sm">当前版本</CardTitle>
+          <CardDescription>正在运行的二进制信息</CardDescription>
+          <CardAction>
+            {current ? <Badge variant="outline">{current.channel}</Badge> : null}
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0">
           {current ? (
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
               <dt className="text-muted-foreground">版本</dt>
-              <dd className="font-mono">
-                {current.version}
-                <Badge className="ml-2" variant="outline">
-                  {current.channel}
-                </Badge>
-              </dd>
+              <dd className="font-mono">{current.version}</dd>
               <dt className="text-muted-foreground">Commit</dt>
               <dd className="font-mono text-xs">{shortCommit(current.commit)}</dd>
               <dt className="text-muted-foreground">构建</dt>
@@ -151,9 +150,10 @@ export function UpdatePanel() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader className="p-4 pb-3">
           <CardTitle className="text-sm">更新</CardTitle>
+          <CardDescription>检查、替换并重启到新版本</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 p-4 pt-0">
 
@@ -202,7 +202,7 @@ export function UpdatePanel() {
         ) : null}
 
         {check ? (
-          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3 text-sm">
+          <div className="space-y-3 rounded-md border bg-muted/25 p-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono">{check.latestVersion || check.latestTag}</span>
               <Badge variant={check.updateAvailable ? "default" : "outline"}>
@@ -212,7 +212,7 @@ export function UpdatePanel() {
             {check.publishedAt ? (
               <p className="text-xs text-muted-foreground">{new Date(check.publishedAt).toLocaleString()}</p>
             ) : null}
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
               <dt className="text-muted-foreground">Tag</dt>
               <dd className="font-mono">{check.latestTag}</dd>
               <dt className="text-muted-foreground">Asset</dt>
@@ -233,7 +233,7 @@ export function UpdatePanel() {
               ) : null}
             </dl>
             {check.notes ? (
-              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-xs">
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-background p-2 text-xs">
                 {check.notes}
               </pre>
             ) : null}

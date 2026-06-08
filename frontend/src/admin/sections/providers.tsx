@@ -1,15 +1,15 @@
 import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { maskKey, relativeUnix } from "../../shared/lib/format"
-import { EmptyState } from "../../shared/shell"
+import { EmptyState, PageSection } from "../../shared/shell"
 import type { ProviderConfig } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
-import { Card, CardContent, CardHeader } from "../../shared/ui/card"
 import { Input } from "../../shared/ui/input"
 import { Label } from "../../shared/ui/label"
 import { Switch } from "../../shared/ui/switch"
 import {
   EntityHeader,
+  EntityCard,
   Field,
   FormPanel,
   FormPanelContent,
@@ -71,26 +71,24 @@ export function ProvidersSection({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="grid gap-3">
-        {providers.length ? (
-          providers.map((provider) => (
-            <Card key={provider.id}>
-              <CardHeader className="flex-row items-start justify-between gap-2 space-y-0 p-4 pb-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="truncate text-sm font-semibold">{provider.name}</h3>
-                    {provider.enabled ? null : <Badge variant="outline">停用</Badge>}
-                  </div>
-                  <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-                    {provider.base_url || "未填写 Base URL"}
-                  </p>
-                </div>
-                <RowActions
-                  onEdit={() => startEdit(provider)}
-                  onDelete={() => actions.handleDelete("providers", provider.id, provider.name)}
-                />
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
+      <PageSection title="模型接入" description="配置 OpenAI-compatible Provider 和默认模型">
+        <div className="grid gap-3">
+          {providers.length ? (
+            providers.map((provider) => (
+              <EntityCard
+                key={provider.id}
+                title={provider.name}
+                description={
+                  <span className="font-mono text-xs">{provider.base_url || "未填写 Base URL"}</span>
+                }
+                badges={provider.enabled ? null : <Badge variant="outline">停用</Badge>}
+                actions={
+                  <RowActions
+                    onEdit={() => startEdit(provider)}
+                    onDelete={() => actions.handleDelete("providers", provider.id, provider.name)}
+                  />
+                }
+              >
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   <StatText label="默认模型" value={provider.default_model || "-"} />
                   <StatText label="超时(ms)" value={provider.timeout_ms} />
@@ -102,13 +100,13 @@ export function ProvidersSection({
                     )}
                   />
                 </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <EmptyState title="还没有 Provider" />
-        )}
-      </div>
+              </EntityCard>
+            ))
+          ) : (
+            <EmptyState title="还没有 Provider" />
+          )}
+        </div>
+      </PageSection>
 
       <FormPanel>
         <FormPanelContent>
@@ -145,7 +143,7 @@ export function ProvidersSection({
                 />
               </Field>
             </div>
-            <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2">
+            <div className="flex items-center justify-between rounded-md border bg-muted/25 px-3 py-2">
               <Label htmlFor="provider-enabled">启用</Label>
               <Switch
                 id="provider-enabled"
