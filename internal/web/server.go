@@ -64,10 +64,18 @@ type adminPageData struct {
 	Providers     []model.ProviderConfig           `json:"providers"`
 	Relationships []model.Relationship             `json:"relationships"`
 	AdminOpen     bool                             `json:"adminOpen"`
+	Defaults      adminDefaults                    `json:"defaults"`
 	RoomMembers   map[int64][]model.RoomMemberView `json:"roomMembers"`
 	RunningRooms  int                              `json:"runningRooms"`
 	TotalMessages int                              `json:"totalMessages"`
 	TotalTokens   int                              `json:"totalTokens"`
+}
+
+type adminDefaults struct {
+	Room         config.RoomDefaults         `json:"room"`
+	Persona      config.PersonaDefaults      `json:"persona"`
+	Provider     config.ProviderDefaults     `json:"provider"`
+	Relationship config.RelationshipDefaults `json:"relationship"`
 }
 
 type appTemplateData struct {
@@ -82,6 +90,7 @@ type appBootstrap struct {
 }
 
 func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Scheduler, hub *stream.Hub, logger *log.Logger, onRestart func()) (*Server, error) {
+	cfg = config.WithDefaults(cfg)
 	tmpl, err := template.New("pages").ParseFS(assets, "templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
@@ -100,14 +109,24 @@ func NewServer(cfg config.Config, store *store.Store, scheduler *scheduler.Sched
 		logger:    logger,
 		templates: tmpl,
 		staticFS:  staticFS,
-		updater:   update.NewClient(),
+		updater:   updateClientFromConfig(cfg),
 		onRestart: onRestart,
 		inputLimiter: newRateLimiter(rateLimiterConfig{
-			Limit:   8,
-			Window:  10 * time.Second,
-			MaxKeys: 1024,
+			Limit:   cfg.PublicInput.RateLimit,
+			Window:  cfg.PublicInputWindow(),
+			MaxKeys: cfg.PublicInput.MaxKeys,
 		}),
 	}, nil
+}
+
+func updateClientFromConfig(cfg config.Config) *update.Client {
+	client := update.NewClient()
+	client.Owner = cfg.Update.Owner
+	client.Repo = cfg.Update.Repo
+	client.APITimeout = cfg.UpdateAPITimeout()
+	client.DownloadTimeout = cfg.UpdateDownloadTimeout()
+	client.MaxDownloadBytes = cfg.Update.MaxDownloadBytes
+	return client
 }
 
 func (s *Server) Handler() http.Handler {
@@ -192,7 +211,7 @@ func (s *Server) handleRoom(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	messages, err := s.store.ListRoomMessages(r.Context(), roomID, 80)
+	messages, err := s.store.ListRoomMessages(r.Context(), roomID, s.cfg.RoomDefaults.RoomPageMessageLimit)
 	if err != nil {
 		s.writeError(w, http.StatusInternalServerError, err)
 		return
@@ -226,7 +245,7 @@ func (s *Server) handleRoomMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := s.store.ListRoomMessages(r.Context(), roomID, 100)
+	messages, err := s.store.ListRoomMessages(r.Context(), roomID, s.cfg.RoomDefaults.RoomAPIMessagesLimit)
 	if err != nil {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -303,7 +322,7 @@ func (s *Server) handleRoomInput(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "content is required"})
 		return
 	}
-	if len([]rune(content)) > 280 {
+	if len([]rune(content)) > s.cfg.PublicInput.MaxRunes {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "content too long"})
 		return
 	}
@@ -326,7 +345,7 @@ func (s *Server) handleRoomInput(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.hub.Publish(*message)
-	s.scheduler.Nudge(roomID, 1500*time.Millisecond)
+	s.scheduler.Nudge(roomID, s.cfg.UserInputNudgeDelay())
 	s.writeJSON(w, http.StatusCreated, map[string]any{"message": message})
 }
 
@@ -373,6 +392,12 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		Providers:     providers,
 		Relationships: relationships,
 		AdminOpen:     strings.TrimSpace(s.cfg.AdminPassword) == "",
+		Defaults: adminDefaults{
+			Room:         s.cfg.RoomDefaults,
+			Persona:      s.cfg.PersonaDefaults,
+			Provider:     s.cfg.ProviderDefaults,
+			Relationship: s.cfg.RelationshipDefaults,
+		},
 		RoomMembers:   roomMembers,
 		RunningRooms:  countRunningRooms(rooms),
 		TotalMessages: sumMessages(rooms),
@@ -400,14 +425,14 @@ func (s *Server) handleAdminRoomCreate(w http.ResponseWriter, r *http.Request) {
 		Name:                stringValue(payload, "name"),
 		Topic:               stringValue(payload, "topic"),
 		Description:         stringValue(payload, "description"),
-		Status:              model.RoomStatus(stringValueFallback(payload, "status", string(model.RoomStatusRunning))),
-		Heat:                intValueFallback(payload, "heat", 60),
-		ConflictLevel:       intValueFallback(payload, "conflict_level", 55),
-		TickMinSeconds:      intValueFallback(payload, "tick_min_seconds", 25),
-		TickMaxSeconds:      intValueFallback(payload, "tick_max_seconds", 55),
-		DailyTokenBudget:    intValueFallback(payload, "daily_token_budget", 40000),
-		SummaryTriggerCount: intValueFallback(payload, "summary_trigger_count", 24),
-		MessageRetention:    intValueFallback(payload, "message_retention_count", 120),
+		Status:              model.RoomStatus(stringValueFallback(payload, "status", s.cfg.RoomDefaults.Status)),
+		Heat:                intValueFallback(payload, "heat", s.cfg.RoomDefaults.Heat),
+		ConflictLevel:       intValueFallback(payload, "conflict_level", s.cfg.RoomDefaults.ConflictLevel),
+		TickMinSeconds:      intValueFallback(payload, "tick_min_seconds", s.cfg.RoomDefaults.TickMinSeconds),
+		TickMaxSeconds:      intValueFallback(payload, "tick_max_seconds", s.cfg.RoomDefaults.TickMaxSeconds),
+		DailyTokenBudget:    intValueFallback(payload, "daily_token_budget", s.cfg.RoomDefaults.DailyTokenBudget),
+		SummaryTriggerCount: intValueFallback(payload, "summary_trigger_count", s.cfg.RoomDefaults.SummaryTriggerCount),
+		MessageRetention:    intValueFallback(payload, "message_retention_count", s.cfg.RoomDefaults.MessageRetention),
 	}
 	if strings.TrimSpace(room.Name) == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "room name is required"})
@@ -471,7 +496,7 @@ func (s *Server) handleAdminRoomResume(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	s.scheduler.Nudge(roomID, time.Second)
+	s.scheduler.Nudge(roomID, s.cfg.ManualNudgeDelay())
 	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
@@ -530,15 +555,15 @@ func (s *Server) handleAdminPersonaCreate(w http.ResponseWriter, r *http.Request
 		Stance:           stringValue(payload, "stance"),
 		Goal:             stringValue(payload, "goal"),
 		Taboo:            stringValue(payload, "taboo"),
-		Aggression:       intValueFallback(payload, "aggression", 50),
-		ActivityLevel:    intValueFallback(payload, "activity_level", 50),
+		Aggression:       intValueFallback(payload, "aggression", s.cfg.PersonaDefaults.Aggression),
+		ActivityLevel:    intValueFallback(payload, "activity_level", s.cfg.PersonaDefaults.ActivityLevel),
 		FactionID:        int64Value(payload, "faction_id"),
 		ProviderConfigID: int64Value(payload, "provider_config_id"),
 		ModelName:        stringValue(payload, "model_name"),
-		Temperature:      floatValueFallback(payload, "temperature", 0.9),
-		MaxTokens:        intValueFallback(payload, "max_tokens", 220),
-		CooldownSeconds:  intValueFallback(payload, "cooldown_seconds", 120),
-		Enabled:          boolValueFallback(payload, "enabled", true),
+		Temperature:      floatValueFallback(payload, "temperature", s.cfg.PersonaDefaults.Temperature),
+		MaxTokens:        intValueFallback(payload, "max_tokens", s.cfg.PersonaDefaults.MaxTokens),
+		CooldownSeconds:  intValueFallback(payload, "cooldown_seconds", s.cfg.PersonaDefaults.CooldownSeconds),
+		Enabled:          boolValueFallback(payload, "enabled", s.cfg.PersonaDefaults.Enabled),
 	}
 	if strings.TrimSpace(persona.Name) == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "persona name is required"})
@@ -640,8 +665,8 @@ func (s *Server) handleAdminProviderCreate(w http.ResponseWriter, r *http.Reques
 		BaseURL:      stringValue(payload, "base_url"),
 		APIKey:       stringValue(payload, "api_key"),
 		DefaultModel: stringValue(payload, "default_model"),
-		TimeoutMS:    intValueFallback(payload, "timeout_ms", 20000),
-		Enabled:      boolValueFallback(payload, "enabled", true),
+		TimeoutMS:    intValueFallback(payload, "timeout_ms", s.cfg.ProviderDefaults.TimeoutMS),
+		Enabled:      boolValueFallback(payload, "enabled", s.cfg.ProviderDefaults.Enabled),
 	}
 	if strings.TrimSpace(provider.Name) == "" {
 		s.writeJSON(w, http.StatusBadRequest, map[string]any{"error": "provider name is required"})
@@ -742,10 +767,10 @@ func (s *Server) handleAdminRelationshipUpsert(w http.ResponseWriter, r *http.Re
 	rel := &model.Relationship{
 		SourcePersonaID: int64Value(payload, "source_persona_id"),
 		TargetPersonaID: int64Value(payload, "target_persona_id"),
-		Affinity:        intValueFallback(payload, "affinity", 0),
-		Hostility:       intValueFallback(payload, "hostility", 0),
-		Respect:         intValueFallback(payload, "respect", 0),
-		FocusWeight:     intValueFallback(payload, "focus_weight", 0),
+		Affinity:        intValueFallback(payload, "affinity", s.cfg.RelationshipDefaults.Affinity),
+		Hostility:       intValueFallback(payload, "hostility", s.cfg.RelationshipDefaults.Hostility),
+		Respect:         intValueFallback(payload, "respect", s.cfg.RelationshipDefaults.Respect),
+		FocusWeight:     intValueFallback(payload, "focus_weight", s.cfg.RelationshipDefaults.FocusWeight),
 		Notes:           stringValue(payload, "notes"),
 	}
 	if rel.SourcePersonaID <= 0 || rel.TargetPersonaID <= 0 {
@@ -783,7 +808,7 @@ func (s *Server) handleAdminVersion(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminUpdateCheck(w http.ResponseWriter, r *http.Request) {
 	channel := strings.TrimSpace(r.URL.Query().Get("channel"))
 	if channel == "" {
-		channel = version.Channel
+		channel = s.defaultUpdateChannel()
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -806,7 +831,7 @@ func (s *Server) handleAdminUpdateApply(w http.ResponseWriter, r *http.Request) 
 	}
 	channel := strings.TrimSpace(stringValue(payload, "channel"))
 	if channel == "" {
-		channel = version.Channel
+		channel = s.defaultUpdateChannel()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -820,6 +845,16 @@ func (s *Server) handleAdminUpdateApply(w http.ResponseWriter, r *http.Request) 
 		"channel":         channel,
 		"requiresRestart": true,
 	})
+}
+
+func (s *Server) defaultUpdateChannel() string {
+	if version.Channel == update.ChannelDev || version.Channel == update.ChannelStable {
+		return version.Channel
+	}
+	if s.cfg.Update.DefaultChannel == update.ChannelDev || s.cfg.Update.DefaultChannel == update.ChannelStable {
+		return s.cfg.Update.DefaultChannel
+	}
+	return update.ChannelStable
 }
 
 func (s *Server) handleAdminRestart(w http.ResponseWriter, r *http.Request) {

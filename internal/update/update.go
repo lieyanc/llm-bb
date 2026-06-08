@@ -74,9 +74,12 @@ type CheckResult struct {
 }
 
 type Client struct {
-	Owner      string
-	Repo       string
-	HTTPClient *http.Client
+	Owner            string
+	Repo             string
+	HTTPClient       *http.Client
+	APITimeout       time.Duration
+	DownloadTimeout  time.Duration
+	MaxDownloadBytes int64
 }
 
 type versionMetadata struct {
@@ -104,8 +107,11 @@ const (
 
 func NewClient() *Client {
 	return &Client{
-		Owner: DefaultOwner,
-		Repo:  DefaultRepo,
+		Owner:            DefaultOwner,
+		Repo:             DefaultRepo,
+		APITimeout:       httpTimeout,
+		DownloadTimeout:  dlTimeout,
+		MaxDownloadBytes: maxArchiveSize,
 	}
 }
 
@@ -113,7 +119,31 @@ func (c *Client) httpClient(timeout time.Duration) *http.Client {
 	if c.HTTPClient != nil {
 		return c.HTTPClient
 	}
+	if timeout <= 0 {
+		timeout = httpTimeout
+	}
 	return &http.Client{Timeout: timeout}
+}
+
+func (c *Client) apiTimeout() time.Duration {
+	if c.APITimeout <= 0 {
+		return httpTimeout
+	}
+	return c.APITimeout
+}
+
+func (c *Client) downloadTimeout() time.Duration {
+	if c.DownloadTimeout <= 0 {
+		return dlTimeout
+	}
+	return c.DownloadTimeout
+}
+
+func (c *Client) maxDownloadBytes() int64 {
+	if c.MaxDownloadBytes <= 0 {
+		return maxArchiveSize
+	}
+	return c.MaxDownloadBytes
 }
 
 func (c *Client) releaseURL(channel string) (string, error) {
@@ -144,7 +174,7 @@ func (c *Client) FetchRelease(ctx context.Context, channel string) (*Release, er
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := c.httpClient(httpTimeout).Do(req)
+	resp, err := c.httpClient(c.apiTimeout()).Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("github api request: %w", err)
 	}
@@ -445,7 +475,7 @@ func (c *Client) Apply(ctx context.Context, channel string) error {
 		return fmt.Errorf("fetch sha256: %w", err)
 	}
 
-	payload, err := c.download(ctx, assets.payload.BrowserDownloadURL, maxArchiveSize)
+	payload, err := c.download(ctx, assets.payload.BrowserDownloadURL, c.maxDownloadBytes())
 	if err != nil {
 		return fmt.Errorf("download %s: %w", assets.kind, err)
 	}
@@ -457,7 +487,7 @@ func (c *Client) Apply(ctx context.Context, channel string) error {
 
 	binary := payload
 	if assets.needsUnzip {
-		binary, err = extractBinary(assets.payload.Name, payload)
+		binary, err = extractBinary(assets.payload.Name, payload, c.maxDownloadBytes())
 		if err != nil {
 			return fmt.Errorf("extract binary: %w", err)
 		}
@@ -474,7 +504,7 @@ func (c *Client) download(ctx context.Context, url string, maxSize int64) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.httpClient(dlTimeout).Do(req)
+	resp, err := c.httpClient(c.downloadTimeout()).Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -500,7 +530,10 @@ func (c *Client) downloadSHA(ctx context.Context, url string) (string, error) {
 	return strings.ToLower(line), nil
 }
 
-func extractBinary(archiveName string, data []byte) ([]byte, error) {
+func extractBinary(archiveName string, data []byte, maxSize int64) ([]byte, error) {
+	if maxSize <= 0 {
+		maxSize = maxArchiveSize
+	}
 	if strings.HasSuffix(archiveName, ".zip") {
 		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
@@ -515,7 +548,7 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			content, readErr := io.ReadAll(io.LimitReader(rc, maxArchiveSize))
+			content, readErr := io.ReadAll(io.LimitReader(rc, maxSize))
 			closeErr := rc.Close()
 			if readErr != nil {
 				return nil, readErr
@@ -553,7 +586,7 @@ func extractBinary(archiveName string, data []byte) ([]byte, error) {
 		if hdr.Typeflag != tar.TypeReg {
 			continue
 		}
-		content, err := io.ReadAll(io.LimitReader(tr, maxArchiveSize))
+		content, err := io.ReadAll(io.LimitReader(tr, maxSize))
 		if err != nil {
 			return nil, err
 		}

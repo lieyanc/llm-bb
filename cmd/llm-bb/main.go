@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"syscall"
-	"time"
 
 	"llm-bb/internal/config"
 	"llm-bb/internal/engine"
@@ -64,6 +63,7 @@ func printUsage() {
 	fmt.Println("  llm-bb update [options]        update the binary from GitHub releases")
 	fmt.Println()
 	fmt.Println("Update options:")
+	fmt.Println("  --config <path>                path to config file")
 	fmt.Println("  --channel <stable|dev>         release channel (default: build channel)")
 	fmt.Println("  --check                        only check, don't apply")
 }
@@ -78,16 +78,26 @@ func printVersion() {
 
 func runUpdateCmd(args []string) error {
 	flags := flag.NewFlagSet("update", flag.ContinueOnError)
-	channel := flags.String("channel", defaultChannel(), "release channel: stable or dev")
+	var configPath string
+	flags.StringVar(&configPath, "config", "", "path to config file")
+	channel := flags.String("channel", "", "release channel: stable or dev")
 	checkOnly := flags.Bool("check", false, "only check, don't apply")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if *channel == "" {
+		*channel = defaultChannel(cfg)
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	client := update.NewClient()
+	client := updateClientFromConfig(cfg)
 	result, err := client.Check(ctx, *channel, version.Commit, version.Version)
 	if err != nil {
 		return err
@@ -116,11 +126,24 @@ func runUpdateCmd(args []string) error {
 	return nil
 }
 
-func defaultChannel() string {
+func defaultChannel(cfg config.Config) string {
 	if version.Channel == update.ChannelDev || version.Channel == update.ChannelStable {
 		return version.Channel
 	}
+	if cfg.Update.DefaultChannel == update.ChannelDev || cfg.Update.DefaultChannel == update.ChannelStable {
+		return cfg.Update.DefaultChannel
+	}
 	return update.ChannelStable
+}
+
+func updateClientFromConfig(cfg config.Config) *update.Client {
+	client := update.NewClient()
+	client.Owner = cfg.Update.Owner
+	client.Repo = cfg.Update.Repo
+	client.APITimeout = cfg.UpdateAPITimeout()
+	client.DownloadTimeout = cfg.UpdateDownloadTimeout()
+	client.MaxDownloadBytes = cfg.Update.MaxDownloadBytes
+	return client
 }
 
 func formatBytes(b int64) string {
@@ -162,7 +185,7 @@ func run(logger *log.Logger, args []string) (runErr error) {
 	)
 	defer stop()
 
-	dbStore, err := store.Open(cfg.DatabasePath)
+	dbStore, err := store.OpenWithConfig(cfg.DatabasePath, cfg)
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)
 	}
@@ -186,7 +209,7 @@ func run(logger *log.Logger, args []string) (runErr error) {
 		}
 	}
 
-	llmClient := llm.NewClient(cfg.DefaultTimeout())
+	llmClient := llm.NewClientWithConfig(cfg.DefaultTimeout(), cfg.LLM)
 	roomEngine := engine.New(dbStore, llmClient, cfg, logger)
 	hub := stream.NewHub()
 	defer hub.Close()
@@ -212,9 +235,9 @@ func run(logger *log.Logger, args []string) (runErr error) {
 		Addr:         cfg.Address,
 		Handler:      server.Handler(),
 		BaseContext:  func(net.Listener) context.Context { return rootCtx },
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.HTTPReadTimeout(),
+		WriteTimeout: cfg.HTTPWriteTimeout(),
+		IdleTimeout:  cfg.HTTPIdleTimeout(),
 	}
 
 	go roomScheduler.Run(rootCtx)
@@ -239,7 +262,7 @@ func run(logger *log.Logger, args []string) (runErr error) {
 		stop()
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout())
 	defer cancel()
 
 	hub.Close()

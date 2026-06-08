@@ -2,7 +2,7 @@ import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { maskKey, relativeUnix } from "../../shared/lib/format"
 import { EmptyState, PageSection } from "../../shared/shell"
-import type { ProviderConfig } from "../../shared/types"
+import type { AdminDefaults, ProviderConfig } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
 import { Input } from "../../shared/ui/input"
 import { Label } from "../../shared/ui/label"
@@ -19,24 +19,28 @@ import {
 } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
-const emptyDraft = {
-  name: "",
-  base_url: "",
-  api_key: "",
-  default_model: "",
-  timeout_ms: "20000",
-  enabled: true,
+function makeEmptyDraft(defaults: AdminDefaults["provider"]) {
+  return {
+    name: "",
+    base_url: "",
+    api_key: "",
+    default_model: "",
+    timeout_ms: String(defaults.timeout_ms),
+    enabled: defaults.enabled,
+  }
 }
 
 export function ProvidersSection({
   providers,
+  defaults,
   actions,
 }: {
   providers: ProviderConfig[]
+  defaults: AdminDefaults["provider"]
   actions: AdminActions
 }) {
   const [editing, setEditing] = useState<ProviderConfig | null>(null)
-  const [draft, setDraft] = useState(emptyDraft)
+  const [draft, setDraft] = useState(() => makeEmptyDraft(defaults))
 
   function startEdit(provider: ProviderConfig) {
     setEditing(provider)
@@ -52,7 +56,7 @@ export function ProvidersSection({
 
   function cancelEdit() {
     setEditing(null)
-    setDraft(emptyDraft)
+    setDraft(makeEmptyDraft(defaults))
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

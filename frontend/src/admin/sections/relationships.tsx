@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { postJSON } from "../../shared/lib/api"
 import { EmptyState, PageSection } from "../../shared/shell"
-import type { Persona, Relationship } from "../../shared/types"
+import type { AdminDefaults, Persona, Relationship } from "../../shared/types"
 import { Input } from "../../shared/ui/input"
 import { Textarea } from "../../shared/ui/textarea"
 import {
@@ -17,26 +17,30 @@ import {
 } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
-const emptyDraft = {
-  source_persona_id: "",
-  target_persona_id: "",
-  affinity: "0",
-  hostility: "0",
-  respect: "0",
-  focus_weight: "0",
-  notes: "",
+function makeEmptyDraft(defaults: AdminDefaults["relationship"]) {
+  return {
+    source_persona_id: "",
+    target_persona_id: "",
+    affinity: String(defaults.affinity),
+    hostility: String(defaults.hostility),
+    respect: String(defaults.respect),
+    focus_weight: String(defaults.focus_weight),
+    notes: "",
+  }
 }
 
 export function RelationshipsSection({
   relationships,
   personas,
+  defaults,
   actions,
 }: {
   relationships: Relationship[]
   personas: Persona[]
+  defaults: AdminDefaults["relationship"]
   actions: AdminActions
 }) {
-  const [draft, setDraft] = useState(emptyDraft)
+  const [draft, setDraft] = useState(() => makeEmptyDraft(defaults))
   const personaMap = new Map(personas.map((p) => [p.id, p.name]))
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

@@ -13,14 +13,21 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"llm-bb/internal/config"
 	"llm-bb/internal/model"
 )
 
 type Store struct {
-	db *sql.DB
+	db  *sql.DB
+	cfg config.Config
 }
 
 func Open(path string) (*Store, error) {
+	return OpenWithConfig(path, config.Default())
+}
+
+func OpenWithConfig(path string, cfg config.Config) (*Store, error) {
+	cfg = config.WithDefaults(cfg)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
@@ -30,12 +37,19 @@ func Open(path string) (*Store, error) {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	sqliteCfg := cfg.SQLite
+	if sqliteCfg.MaxOpenConns <= 0 {
+		sqliteCfg.MaxOpenConns = 1
+	}
+	if sqliteCfg.MaxIdleConns < 0 {
+		sqliteCfg.MaxIdleConns = 1
+	}
+	db.SetMaxOpenConns(sqliteCfg.MaxOpenConns)
+	db.SetMaxIdleConns(sqliteCfg.MaxIdleConns)
 	db.SetConnMaxLifetime(0)
 
-	store := &Store{db: db}
-	if err := store.applyPragmas(context.Background()); err != nil {
+	store := &Store{db: db, cfg: cfg}
+	if err := store.applyPragmas(context.Background(), sqliteCfg); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -47,11 +61,28 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-func (s *Store) applyPragmas(ctx context.Context) error {
+func (s *Store) applyPragmas(ctx context.Context, cfg config.SQLiteConfig) error {
+	journalMode := strings.TrimSpace(cfg.JournalMode)
+	if journalMode == "" {
+		journalMode = "WAL"
+	}
+	switch strings.ToUpper(journalMode) {
+	case "DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF":
+	default:
+		return fmt.Errorf("invalid sqlite journal mode %q", journalMode)
+	}
+	foreignKeys := "OFF"
+	if cfg.ForeignKeys {
+		foreignKeys = "ON"
+	}
+	if cfg.BusyTimeoutMS <= 0 {
+		cfg.BusyTimeoutMS = 5000
+	}
+
 	pragmas := []string{
-		"PRAGMA journal_mode = WAL;",
-		"PRAGMA foreign_keys = ON;",
-		"PRAGMA busy_timeout = 5000;",
+		"PRAGMA journal_mode = " + journalMode + ";",
+		"PRAGMA foreign_keys = " + foreignKeys + ";",
+		fmt.Sprintf("PRAGMA busy_timeout = %d;", cfg.BusyTimeoutMS),
 	}
 
 	for _, stmt := range pragmas {

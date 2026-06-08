@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { EmptyState, PageSection } from "../../shared/shell"
-import type { Faction, Persona, ProviderConfig } from "../../shared/types"
+import type { AdminDefaults, Faction, Persona, ProviderConfig } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
 import { Input } from "../../shared/ui/input"
 import { Label } from "../../shared/ui/label"
@@ -20,7 +20,11 @@ import {
 } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
-function makeEmptyDraft(factions: Faction[], providers: ProviderConfig[]) {
+function makeEmptyDraft(
+  factions: Faction[],
+  providers: ProviderConfig[],
+  defaults: AdminDefaults["persona"],
+) {
   return {
     name: "",
     public_identity: "",
@@ -31,12 +35,12 @@ function makeEmptyDraft(factions: Faction[], providers: ProviderConfig[]) {
     faction_id: factions[0]?.id ? String(factions[0].id) : "",
     provider_config_id: providers[0]?.id ? String(providers[0].id) : "",
     model_name: "",
-    temperature: "0.9",
-    max_tokens: "220",
-    cooldown_seconds: "120",
-    aggression: "50",
-    activity_level: "50",
-    enabled: true,
+    temperature: String(defaults.temperature),
+    max_tokens: String(defaults.max_tokens),
+    cooldown_seconds: String(defaults.cooldown_seconds),
+    aggression: String(defaults.aggression),
+    activity_level: String(defaults.activity_level),
+    enabled: defaults.enabled,
   }
 }
 
@@ -44,15 +48,17 @@ export function PersonasSection({
   personas,
   factions,
   providers,
+  defaults,
   actions,
 }: {
   personas: Persona[]
   factions: Faction[]
   providers: ProviderConfig[]
+  defaults: AdminDefaults["persona"]
   actions: AdminActions
 }) {
   const [editing, setEditing] = useState<Persona | null>(null)
-  const [draft, setDraft] = useState(() => makeEmptyDraft(factions, providers))
+  const [draft, setDraft] = useState(() => makeEmptyDraft(factions, providers, defaults))
 
   function startEdit(persona: Persona) {
     setEditing(persona)
@@ -77,7 +83,7 @@ export function PersonasSection({
 
   function cancelEdit() {
     setEditing(null)
-    setDraft(makeEmptyDraft(factions, providers))
+    setDraft(makeEmptyDraft(factions, providers, defaults))
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {

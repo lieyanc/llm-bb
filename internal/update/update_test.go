@@ -133,7 +133,7 @@ func TestDownloadSHAParsesSha256sumOutput(t *testing.T) {
 func TestExtractBinaryFromTarGz(t *testing.T) {
 	const content = "new binary"
 	data := tarGz(t, "llm-bb", []byte(content))
-	got, err := extractBinary("llm-bb-linux-amd64.tar.gz", data)
+	got, err := extractBinary("llm-bb-linux-amd64.tar.gz", data, maxArchiveSize)
 	if err != nil {
 		t.Fatalf("extractBinary returned error: %v", err)
 	}

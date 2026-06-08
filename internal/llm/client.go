@@ -10,11 +10,18 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"llm-bb/internal/config"
 )
 
 type Client struct {
-	httpClient     *http.Client
-	defaultTimeout time.Duration
+	httpClient         *http.Client
+	defaultTimeout     time.Duration
+	defaultTemperature float64
+	defaultMaxTokens   int
+	requestRetries     int
+	retryBackoff       time.Duration
+	maxResponseBytes   int64
 }
 
 type Message struct {
@@ -39,9 +46,35 @@ type ChatResponse struct {
 }
 
 func NewClient(defaultTimeout time.Duration) *Client {
+	defaults := config.Default()
+	return NewClientWithConfig(defaultTimeout, defaults.LLM)
+}
+
+func NewClientWithConfig(defaultTimeout time.Duration, cfg config.LLMConfig) *Client {
+	if cfg.DefaultTemperature <= 0 {
+		cfg.DefaultTemperature = 0.9
+	}
+	if cfg.DefaultMaxTokens <= 0 {
+		cfg.DefaultMaxTokens = 256
+	}
+	if cfg.RequestRetries <= 0 {
+		cfg.RequestRetries = 3
+	}
+	if cfg.RetryBackoffMS <= 0 {
+		cfg.RetryBackoffMS = 350
+	}
+	if cfg.MaxResponseBytes <= 0 {
+		cfg.MaxResponseBytes = 1 << 20
+	}
+
 	return &Client{
-		httpClient:     &http.Client{},
-		defaultTimeout: defaultTimeout,
+		httpClient:         &http.Client{},
+		defaultTimeout:     defaultTimeout,
+		defaultTemperature: cfg.DefaultTemperature,
+		defaultMaxTokens:   cfg.DefaultMaxTokens,
+		requestRetries:     cfg.RequestRetries,
+		retryBackoff:       time.Duration(cfg.RetryBackoffMS) * time.Millisecond,
+		maxResponseBytes:   cfg.MaxResponseBytes,
 	}
 }
 
@@ -56,10 +89,10 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (ChatResponse, e
 		return ChatResponse{}, errors.New("messages are required")
 	}
 	if req.MaxTokens <= 0 {
-		req.MaxTokens = 256
+		req.MaxTokens = c.defaultMaxTokens
 	}
 	if req.Temperature == 0 {
-		req.Temperature = 0.9
+		req.Temperature = c.defaultTemperature
 	}
 
 	timeout := req.Timeout
@@ -85,7 +118,7 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (ChatResponse, e
 	}
 
 	var lastErr error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < c.requestRetries; attempt++ {
 		response, err := c.doRequest(ctx, req, body)
 		if err == nil {
 			return response, nil
@@ -99,7 +132,7 @@ func (c *Client) Complete(ctx context.Context, req ChatRequest) (ChatResponse, e
 		select {
 		case <-ctx.Done():
 			return ChatResponse{}, ctx.Err()
-		case <-time.After(time.Duration(attempt+1) * 350 * time.Millisecond):
+		case <-time.After(time.Duration(attempt+1) * c.retryBackoff):
 		}
 	}
 
@@ -127,7 +160,7 @@ func (c *Client) doRequest(ctx context.Context, req ChatRequest, body []byte) (C
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, c.maxResponseBytes))
 	if err != nil {
 		return ChatResponse{}, fmt.Errorf("read response: %w", err)
 	}

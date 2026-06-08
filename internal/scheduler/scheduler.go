@@ -36,6 +36,7 @@ type Scheduler struct {
 var ErrRoomBusy = errors.New("room is already running")
 
 func New(store *store.Store, engine *engine.Engine, hub *stream.Hub, cfg config.Config, logger *log.Logger) *Scheduler {
+	cfg = config.WithDefaults(cfg)
 	loopDone := make(chan struct{})
 	close(loopDone)
 
@@ -69,7 +70,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 		s.mu.Unlock()
 	}()
 
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(s.cfg.SchedulerPollInterval())
 	defer ticker.Stop()
 
 	for {
@@ -98,7 +99,7 @@ func (s *Scheduler) TriggerRoom(ctx context.Context, roomID int64) (*model.Messa
 	if result.Message != nil {
 		s.hub.Publish(*result.Message)
 	}
-	s.Nudge(roomID, 5*time.Second)
+	s.Nudge(roomID, s.cfg.ManualNudgeDelay())
 	return result.Message, nil
 }
 
@@ -237,7 +238,7 @@ func (s *Scheduler) randomDelay(room model.Room) time.Duration {
 	minSeconds := room.TickMinSeconds
 	maxSeconds := room.TickMaxSeconds
 	if minSeconds <= 0 {
-		minSeconds = 20
+		minSeconds = s.cfg.Scheduler.DefaultTickMinSec
 	}
 	if maxSeconds < minSeconds {
 		maxSeconds = minSeconds

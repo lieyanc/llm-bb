@@ -3,7 +3,7 @@ import { type FormEvent, useState } from "react"
 import { patchJSON, postJSON } from "../../shared/lib/api"
 import { relativeUnix, statusLabel, statusTone } from "../../shared/lib/format"
 import { EmptyState, PageSection } from "../../shared/shell"
-import type { Persona, RoomMemberView, RoomOverview } from "../../shared/types"
+import type { AdminDefaults, Persona, RoomMemberView, RoomOverview } from "../../shared/types"
 import { Badge } from "../../shared/ui/badge"
 import { Button } from "../../shared/ui/button"
 import { Checkbox } from "../../shared/ui/checkbox"
@@ -23,32 +23,36 @@ import {
 } from "../ui"
 import type { AdminActions } from "../use-admin-actions"
 
-const emptyDraft = {
-  name: "",
-  topic: "",
-  description: "",
-  heat: "60",
-  conflict_level: "55",
-  tick_min_seconds: "25",
-  tick_max_seconds: "55",
-  daily_token_budget: "40000",
-  summary_trigger_count: "24",
-  message_retention_count: "120",
+function makeEmptyDraft(defaults: AdminDefaults["room"]) {
+  return {
+    name: "",
+    topic: "",
+    description: "",
+    heat: String(defaults.heat),
+    conflict_level: String(defaults.conflict_level),
+    tick_min_seconds: String(defaults.tick_min_seconds),
+    tick_max_seconds: String(defaults.tick_max_seconds),
+    daily_token_budget: String(defaults.daily_token_budget),
+    summary_trigger_count: String(defaults.summary_trigger_count),
+    message_retention_count: String(defaults.message_retention_count),
+  }
 }
 
 export function RoomsSection({
   rooms,
   personas,
   roomMembers,
+  defaults,
   actions,
 }: {
   rooms: RoomOverview[]
   personas: Persona[]
   roomMembers: Record<string, RoomMemberView[]>
+  defaults: AdminDefaults["room"]
   actions: AdminActions
 }) {
   const [editing, setEditing] = useState<RoomOverview | null>(null)
-  const [draft, setDraft] = useState(emptyDraft)
+  const [draft, setDraft] = useState(() => makeEmptyDraft(defaults))
   const [selected, setSelected] = useState<number[]>([])
 
   function startEdit(room: RoomOverview) {
@@ -70,7 +74,7 @@ export function RoomsSection({
 
   function cancelEdit() {
     setEditing(null)
-    setDraft(emptyDraft)
+    setDraft(makeEmptyDraft(defaults))
     setSelected([])
   }
 

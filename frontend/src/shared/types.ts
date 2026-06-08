@@ -164,6 +164,42 @@ export interface UpdateCheckResult {
   updateAvailable: boolean
 }
 
+export interface AdminDefaults {
+  room: {
+    status: RoomStatus
+    heat: number
+    conflict_level: number
+    tick_min_seconds: number
+    tick_max_seconds: number
+    daily_token_budget: number
+    summary_trigger_count: number
+    message_retention_count: number
+    room_page_message_limit: number
+    room_api_messages_limit: number
+    recent_message_limit: number
+    prompt_recent_messages: number
+    summary_extra_messages: number
+  }
+  persona: {
+    aggression: number
+    activity_level: number
+    temperature: number
+    max_tokens: number
+    cooldown_seconds: number
+    enabled: boolean
+  }
+  provider: {
+    timeout_ms: number
+    enabled: boolean
+  }
+  relationship: {
+    affinity: number
+    hostility: number
+    respect: number
+    focus_weight: number
+  }
+}
+
 export interface HomePageData {
   rooms: RoomOverview[]
   totalRooms: number
@@ -189,6 +225,7 @@ export interface AdminPageData {
   providers: ProviderConfig[]
   relationships: Relationship[]
   adminOpen: boolean
+  defaults: AdminDefaults
   roomMembers: Record<string, RoomMemberView[]>
   runningRooms: number
   totalMessages: number

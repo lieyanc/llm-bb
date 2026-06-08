@@ -100,6 +100,7 @@ export function AdminApp({ data }: { data: AdminPageData }) {
             rooms={data.rooms}
             personas={data.personas}
             roomMembers={data.roomMembers}
+            defaults={data.defaults.room}
             actions={actions}
           />
         </TabsContent>
@@ -108,6 +109,7 @@ export function AdminApp({ data }: { data: AdminPageData }) {
             personas={data.personas}
             factions={data.factions}
             providers={data.providers}
+            defaults={data.defaults.persona}
             actions={actions}
           />
         </TabsContent>
@@ -118,11 +120,12 @@ export function AdminApp({ data }: { data: AdminPageData }) {
           <RelationshipsSection
             relationships={data.relationships ?? []}
             personas={data.personas}
+            defaults={data.defaults.relationship}
             actions={actions}
           />
         </TabsContent>
         <TabsContent value="providers">
-          <ProvidersSection providers={data.providers} actions={actions} />
+          <ProvidersSection providers={data.providers} defaults={data.defaults.provider} actions={actions} />
         </TabsContent>
         <TabsContent value="system">
           <SystemSection />

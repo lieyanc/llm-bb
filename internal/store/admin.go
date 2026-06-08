@@ -42,7 +42,7 @@ func (s *Store) ListProviders(ctx context.Context) ([]model.ProviderConfig, erro
 
 func (s *Store) CreateProvider(ctx context.Context, provider *model.ProviderConfig) error {
 	if provider.TimeoutMS <= 0 {
-		provider.TimeoutMS = 20000
+		provider.TimeoutMS = s.cfg.ProviderDefaults.TimeoutMS
 	}
 	now := time.Now().UTC()
 	provider.CreatedAt = now
@@ -200,16 +200,19 @@ func (s *Store) ListPersonas(ctx context.Context) ([]model.Persona, error) {
 
 func (s *Store) CreatePersona(ctx context.Context, persona *model.Persona) error {
 	if persona.Temperature == 0 {
-		persona.Temperature = 0.9
+		persona.Temperature = s.cfg.PersonaDefaults.Temperature
 	}
 	if persona.MaxTokens <= 0 {
-		persona.MaxTokens = 220
+		persona.MaxTokens = s.cfg.PersonaDefaults.MaxTokens
 	}
 	if persona.CooldownSeconds <= 0 {
-		persona.CooldownSeconds = 120
+		persona.CooldownSeconds = s.cfg.PersonaDefaults.CooldownSeconds
 	}
 	if persona.ActivityLevel <= 0 {
-		persona.ActivityLevel = 50
+		persona.ActivityLevel = s.cfg.PersonaDefaults.ActivityLevel
+	}
+	if persona.Aggression <= 0 {
+		persona.Aggression = s.cfg.PersonaDefaults.Aggression
 	}
 	now := time.Now().UTC()
 	persona.CreatedAt = now
@@ -285,28 +288,28 @@ func (s *Store) PatchPersona(ctx context.Context, id int64, fields map[string]an
 
 func (s *Store) CreateRoom(ctx context.Context, room *model.Room) error {
 	if room.Status == "" {
-		room.Status = model.RoomStatusRunning
+		room.Status = model.RoomStatus(s.cfg.RoomDefaults.Status)
 	}
 	if room.TickMinSeconds <= 0 {
-		room.TickMinSeconds = 25
+		room.TickMinSeconds = s.cfg.RoomDefaults.TickMinSeconds
 	}
 	if room.TickMaxSeconds <= 0 {
-		room.TickMaxSeconds = 55
+		room.TickMaxSeconds = s.cfg.RoomDefaults.TickMaxSeconds
 	}
 	if room.DailyTokenBudget <= 0 {
-		room.DailyTokenBudget = 40000
+		room.DailyTokenBudget = s.cfg.RoomDefaults.DailyTokenBudget
 	}
 	if room.SummaryTriggerCount <= 0 {
-		room.SummaryTriggerCount = 24
+		room.SummaryTriggerCount = s.cfg.RoomDefaults.SummaryTriggerCount
 	}
 	if room.MessageRetention <= 0 {
-		room.MessageRetention = 120
+		room.MessageRetention = s.cfg.RoomDefaults.MessageRetention
 	}
 	if room.Heat <= 0 {
-		room.Heat = 50
+		room.Heat = s.cfg.RoomDefaults.Heat
 	}
 	if room.ConflictLevel <= 0 {
-		room.ConflictLevel = 50
+		room.ConflictLevel = s.cfg.RoomDefaults.ConflictLevel
 	}
 	now := time.Now().UTC()
 	room.CreatedAt = now

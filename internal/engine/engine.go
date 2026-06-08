@@ -36,6 +36,7 @@ type Result struct {
 }
 
 func New(store *store.Store, client *llm.Client, cfg config.Config, logger *log.Logger) *Engine {
+	cfg = config.WithDefaults(cfg)
 	return &Engine{
 		store:  store,
 		client: client,
@@ -62,12 +63,12 @@ func (e *Engine) GenerateNextMessage(ctx context.Context, roomID int64) (Result,
 		return Result{Skipped: true, Reason: "room has no members"}, nil
 	}
 
-	recentDesc, err := e.store.ListRecentMessagesDescending(ctx, roomID, 18)
+	recentDesc, err := e.store.ListRecentMessagesDescending(ctx, roomID, e.cfg.RoomDefaults.RecentMessageLimit)
 	if err != nil {
 		return Result{}, err
 	}
 
-	if shouldSkipDenseOutput(room, recentDesc) {
+	if e.shouldSkipDenseOutput(room, recentDesc) {
 		return Result{Skipped: true, Reason: "recent output too dense"}, nil
 	}
 
@@ -144,7 +145,7 @@ func (e *Engine) GenerateNextMessage(ctx context.Context, roomID int64) (Result,
 	}, nil
 }
 
-func shouldSkipDenseOutput(room model.Room, recent []model.Message) bool {
+func (e *Engine) shouldSkipDenseOutput(room model.Room, recent []model.Message) bool {
 	if len(recent) == 0 {
 		return false
 	}
@@ -155,8 +156,8 @@ func shouldSkipDenseOutput(room model.Room, recent []model.Message) bool {
 	}
 
 	minGap := time.Duration(room.TickMinSeconds) * time.Second / 2
-	if minGap < 6*time.Second {
-		minGap = 6 * time.Second
+	if configured := e.cfg.MinDenseGap(); minGap < configured {
+		minGap = configured
 	}
 	return time.Since(latest.CreatedAt) < minGap
 }
@@ -255,7 +256,7 @@ func (e *Engine) selectSpeaker(
 			elapsed := time.Since(lastAt)
 			cooldown := time.Duration(member.CooldownSeconds) * time.Second
 			if cooldown <= 0 {
-				cooldown = 20 * time.Second
+				cooldown = e.cfg.DefaultCooldown()
 			}
 			if elapsed < cooldown {
 				ratio := elapsed.Seconds() / cooldown.Seconds()
@@ -361,8 +362,12 @@ func (e *Engine) buildPrompt(
 	var recent strings.Builder
 	chronological := slices.Clone(recentDesc)
 	slices.Reverse(chronological)
-	if len(chronological) > 10 {
-		chronological = chronological[len(chronological)-10:]
+	promptLimit := e.cfg.RoomDefaults.PromptRecentMessages
+	if promptLimit <= 0 {
+		promptLimit = 10
+	}
+	if len(chronological) > promptLimit {
+		chronological = chronological[len(chronological)-promptLimit:]
 	}
 	for _, message := range chronological {
 		speaker := "系统"
@@ -518,7 +523,7 @@ func (e *Engine) maybeBuildSummary(ctx context.Context, room model.Room, latestS
 		return nil, nil
 	}
 
-	messages, err := e.store.ListRoomMessages(ctx, room.ID, room.SummaryTriggerCount+10)
+	messages, err := e.store.ListRoomMessages(ctx, room.ID, room.SummaryTriggerCount+e.cfg.RoomDefaults.SummaryExtraMessages)
 	if err != nil {
 		return nil, err
 	}
